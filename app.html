@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Translator Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 16px; }
+    textarea { width: 100%; min-height: 120px; }
+    .row { margin-bottom: 12px; }
+    .buttons button { margin-right: 8px; margin-bottom: 8px; }
+    .output { white-space: pre-wrap; border: 1px solid #ddd; padding: 8px; min-height: 80px; }
+    .error { color: #b00020; }
+  </style>
+</head>
+<body>
+  <h1>Translator Demo</h1>
+
+  <div class="row">
+    <label>Shared Secret (X-APP-KEY):</label><br>
+    <input id="appKey" type="password" style="width: 100%;" placeholder="Enter APP_SHARED_SECRET">
+  </div>
+
+  <div class="row">
+    <label>Text:</label><br>
+    <textarea id="inputText" placeholder="Enter text..."></textarea>
+  </div>
+
+  <div class="row buttons">
+    <button onclick="translate('ru')">RU</button>
+    <button onclick="translate('en')">EN</button>
+    <button onclick="translate('es-latam')">ES-LATAM</button>
+    <button onclick="translate('es-es')">ES-ES</button>
+    <button onclick="translate('pt-br')">PT-BR</button>
+    <button onclick="translate('pt-pt')">PT-PT</button>
+    <button onclick="copyOutput()">Copy</button>
+  </div>
+
+  <div class="row">
+    <div id="status" class="error"></div>
+  </div>
+
+  <div class="row">
+    <label>Output:</label>
+    <div id="output" class="output"></div>
+  </div>
+
+  <script>
+    window.translate = async function(target) {
+      const text = document.getElementById("inputText").value || "";
+      const key = document.getElementById("appKey").value || "";
+      const status = document.getElementById("status");
+      const output = document.getElementById("output");
+      status.textContent = "";
+      output.textContent = "";
+
+      try {
+        const res = await fetch("/api/translate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-APP-KEY": key
+          },
+          body: JSON.stringify({ text, target })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          status.textContent = "Request failed: " + (data.error || res.statusText);
+          return;
+        }
+        output.textContent = data.text || "";
+      } catch (err) {
+        status.textContent = "Request failed: " + err;
+      }
+    };
+
+    window.copyOutput = function() {
+      const output = document.getElementById("output").textContent || "";
+      if (!output) {
+        return;
+      }
+      navigator.clipboard.writeText(output).catch(function() {});
+    };
+  </script>
+</body>
+</html>
