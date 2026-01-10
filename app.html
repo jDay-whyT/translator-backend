@@ -202,7 +202,10 @@
             'Content-Type': 'application/json',
             'X-TG-INITDATA': tg?.initData || ''
           },
-          body: JSON.stringify({ text, target })
+          body: JSON.stringify({
+            text: inputText.value || "",
+            target
+          })
         });
         let data = {};
         try {
