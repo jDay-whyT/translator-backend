@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from gpt_prompts import TARGET_SYSTEM_PROMPTS
+from gpt_prompts import BASE_SYSTEM_PROMPT, TARGET_PROMPTS
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
@@ -93,7 +93,7 @@ def translate(
     if len(text) > 10000:
         return JSONResponse(status_code=400, content={"error": "Text is too long"})
 
-    if target not in TARGET_SYSTEM_PROMPTS:
+    if target not in TARGET_PROMPTS:
         return JSONResponse(status_code=400, content={"error": "Unsupported target"})
 
     if not OPENAI_API_KEY:
@@ -101,7 +101,7 @@ def translate(
             status_code=500, content={"error": "OPENAI_API_KEY is missing"}
         )
 
-    system_prompt = TARGET_SYSTEM_PROMPTS[target]
+    system_prompt = f"{BASE_SYSTEM_PROMPT}\n{TARGET_PROMPTS[target]}"
     body = {
         "model": OPENAI_MODEL,
         "temperature": 0,
