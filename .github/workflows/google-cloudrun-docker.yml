@@ -33,10 +33,13 @@ on:
   workflow_dispatch:
 
 env:
-  PROJECT_ID: 'my-project' # TODO: update to your Google Cloud project ID
-  REGION: 'us-central1' # TODO: update to your region
-  SERVICE: 'my-service' # TODO: update to your service name
-  WORKLOAD_IDENTITY_PROVIDER: 'projects/123456789/locations/global/workloadIdentityPools/my-pool/providers/my-provider' # TODO: update to your workload identity provider
+  PROJECT_ID: 'optimum-tea-481710-u3'
+  REGION: 'europe-west1'
+  SERVICE: 'tg-translator'
+  AR_REPO: 'miniapp'
+  IMAGE: 'tg-translator'
+  WORKLOAD_IDENTITY_PROVIDER: 'projects/430816705790/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+  SERVICE_ACCOUNT: 'github-deployer@optimum-tea-481710-u3.iam.gserviceaccount.com'
 
 jobs:
   deploy:
