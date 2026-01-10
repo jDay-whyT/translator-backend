@@ -50,4 +50,7 @@ jobs:
           image: ${{ env.IMAGE_URI }}
 
       - name: Show URL
-        run: echo "Service URL: ${{ steps.deploy.outputs.url }}"
+  run: |
+    echo "Service URL:"
+    echo "${{ steps.deploy.outputs.url }}"
+
