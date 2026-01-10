@@ -2,158 +2,186 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Translator Demo</title>
+  <title>Translator Mini App</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
-    body { font-family: Arial, sans-serif; margin: 16px; }
-    textarea { width: 100%; min-height: 120px; }
-    .row { margin-bottom: 12px; }
-    .buttons button { margin-right: 8px; margin-bottom: 8px; }
-    .output { white-space: pre-wrap; border: 1px solid #ddd; padding: 8px; min-height: 80px; }
-    .error { color: #b00020; }
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 16px;
+      background: #ffffff;
+      color: #111111;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    button {
+      padding: 10px 14px;
+      border: 1px solid #d0d0d0;
+      border-radius: 8px;
+      background: #f7f7f7;
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid #d0d0d0;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    .status {
+      color: #b00020;
+      min-height: 20px;
+    }
+    .hidden {
+      display: none;
+    }
   </style>
 </head>
 <body>
-  <h1>Translator Demo</h1>
+  <div class="container">
+    <h1>Translator</h1>
+    <div id="status" class="status"></div>
 
-  <div class="row">
-    <label>Text:</label><br>
+    <label for="inputText">Text</label>
     <textarea id="inputText" placeholder="Enter text..."></textarea>
-  </div>
 
-  <div class="row buttons">
-    <button onclick="translate('ru')">RU</button>
-    <button onclick="translate('en')">EN</button>
-    <button onclick="translate('es-latam')">ES-LATAM</button>
-    <button onclick="translate('es-es')">ES-ES</button>
-    <button onclick="translate('pt-br')">PT-BR</button>
-    <button onclick="translate('pt-pt')">PT-PT</button>
-    <button onclick="copyOutput()">Copy</button>
-  </div>
+    <div class="buttons" id="primaryButtons">
+      <button data-target="ru">RU</button>
+      <button data-target="en">EN</button>
+      <button data-toggle="es">ES</button>
+      <button data-toggle="pt">PT</button>
+    </div>
 
-  <div class="row">
-    <div id="status" class="error"></div>
-  </div>
+    <div class="buttons hidden" id="esButtons">
+      <button data-target="es-es">ES-ES</button>
+      <button data-target="es-latam">ES-LATAM</button>
+    </div>
 
-  <div class="row">
-    <label>Output:</label>
-    <div id="output" class="output"></div>
+    <div class="buttons hidden" id="ptButtons">
+      <button data-target="pt-pt">PT-PT</button>
+      <button data-target="pt-br">PT-BR</button>
+    </div>
+
+    <label for="outputText">Output</label>
+    <textarea id="outputText" readonly></textarea>
+
+    <button id="copyButton">Copy</button>
   </div>
 
   <script>
-    window.translate = window.translate || function(){ console.error("translate not initialized"); };
-    window.copyOutput = window.copyOutput || function(){};
-
     const tg = window.Telegram?.WebApp;
     tg?.ready?.();
     tg?.expand?.();
 
-    const status = document.getElementById("status");
-    const output = document.getElementById("output");
+    const statusEl = document.getElementById("status");
     const inputText = document.getElementById("inputText");
-    const translateButtons = document.querySelectorAll(".buttons button:not(:last-child)");
+    const outputText = document.getElementById("outputText");
+    const copyButton = document.getElementById("copyButton");
+    const allButtons = document.querySelectorAll("button");
+    const toggleButtons = document.querySelectorAll("[data-toggle]");
+    const targetButtons = document.querySelectorAll("[data-target]");
+    const esButtons = document.getElementById("esButtons");
+    const ptButtons = document.getElementById("ptButtons");
 
-    const applyTheme = () => {
-      const theme = tg?.themeParams || {};
-      if (theme.bg_color) {
-        document.body.style.backgroundColor = theme.bg_color;
-      }
-      if (theme.text_color) {
-        document.body.style.color = theme.text_color;
-        inputText.style.color = theme.text_color;
-        output.style.color = theme.text_color;
-      }
-      if (theme.secondary_bg_color) {
-        inputText.style.backgroundColor = theme.secondary_bg_color;
-        output.style.backgroundColor = theme.secondary_bg_color;
-      }
-      if (theme.hint_color) {
-        inputText.style.borderColor = theme.hint_color;
-        output.style.borderColor = theme.hint_color;
-      }
-    };
+    const getInitData = () => tg?.initData || "";
 
-    const setTranslateButtonsDisabled = (disabled) => {
-      translateButtons.forEach((button) => {
+    const setAllButtonsDisabled = (disabled) => {
+      allButtons.forEach((button) => {
         button.disabled = disabled;
       });
     };
 
-    const hasValidInitData = () => Boolean(tg?.initData);
-
-    const updateTelegramState = () => {
-      if (!hasValidInitData()) {
-        status.textContent = "Открой в Telegram (Mini App)";
-        setTranslateButtonsDisabled(true);
-        return;
-      }
-      status.textContent = "";
-      setTranslateButtonsDisabled(false);
+    const hideSubButtons = () => {
+      esButtons.classList.add("hidden");
+      ptButtons.classList.add("hidden");
     };
 
-    applyTheme();
-    updateTelegramState();
+    const ensureTelegram = () => {
+      if (!tg || !getInitData()) {
+        statusEl.textContent = "Открой в Telegram (Mini App)";
+        setAllButtonsDisabled(true);
+        return false;
+      }
+      return true;
+    };
 
-    window.translate = async function(target) {
-      if (!hasValidInitData()) {
-        updateTelegramState();
+    const resetUiState = () => {
+      if (ensureTelegram()) {
+        statusEl.textContent = "";
+        setAllButtonsDisabled(false);
+      }
+    };
+
+    const translate = async (target) => {
+      if (!ensureTelegram()) {
         return;
       }
-      const text = inputText.value || "";
-      let hadError = false;
-      setTranslateButtonsDisabled(true);
-      status.textContent = "Loading...";
-      output.textContent = "";
+
+      setAllButtonsDisabled(true);
+      statusEl.textContent = "Loading...";
+      outputText.value = "";
 
       try {
         const res = await fetch("/api/translate", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-TG-INITDATA": tg?.initData || ""
+            "X-TG-INITDATA": getInitData()
           },
-          body: JSON.stringify({ text, target })
+          body: JSON.stringify({
+            text: inputText.value || "",
+            target
+          })
         });
 
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          status.textContent = "Request failed: " + (data.error || res.statusText);
-          hadError = true;
+          statusEl.textContent = "Request failed: " + (data.error || res.statusText);
           return;
         }
-        output.textContent = data.text || "";
-        output.scrollIntoView({ behavior: "smooth", block: "start" });
+
+        outputText.value = data.text || "";
+        outputText.scrollIntoView({ behavior: "smooth", block: "start" });
         tg?.HapticFeedback?.impactOccurred?.("light");
+        statusEl.textContent = "";
       } catch (err) {
-        status.textContent = "Request failed: " + err;
-        hadError = true;
+        statusEl.textContent = "Request failed: " + err;
       } finally {
-        if (hasValidInitData()) {
-          if (!hadError) {
-            status.textContent = "";
-          }
-          setTranslateButtonsDisabled(false);
-        } else {
-          updateTelegramState();
-        }
+        resetUiState();
       }
     };
 
-    window.copyOutput = async function() {
-      const outputText = output.textContent || "";
-      if (!outputText) {
+    const copyOutput = async () => {
+      const text = outputText.value || "";
+      if (!text) {
         return;
       }
       if (navigator.clipboard?.writeText) {
         try {
-          await navigator.clipboard.writeText(outputText);
+          await navigator.clipboard.writeText(text);
           return;
         } catch (err) {
         }
       }
       const textarea = document.createElement("textarea");
-      textarea.value = outputText;
+      textarea.value = text;
       textarea.setAttribute("readonly", "");
       textarea.style.position = "absolute";
       textarea.style.left = "-9999px";
@@ -162,6 +190,40 @@
       document.execCommand("copy");
       document.body.removeChild(textarea);
     };
+
+    toggleButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        if (!ensureTelegram()) {
+          return;
+        }
+        const toggle = button.dataset.toggle;
+        if (toggle === "es") {
+          esButtons.classList.toggle("hidden");
+          ptButtons.classList.add("hidden");
+          return;
+        }
+        if (toggle === "pt") {
+          ptButtons.classList.toggle("hidden");
+          esButtons.classList.add("hidden");
+        }
+      });
+    });
+
+    targetButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        hideSubButtons();
+        translate(button.dataset.target);
+      });
+    });
+
+    copyButton.addEventListener("click", () => {
+      copyOutput();
+    });
+
+    hideSubButtons();
+    if (ensureTelegram()) {
+      setAllButtonsDisabled(false);
+    }
   </script>
 </body>
 </html>
