@@ -7,7 +7,9 @@ from urllib.parse import parse_qs
 import requests
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+
+from gpt_prompts import BASE_SYSTEM_PROMPT, TARGET_PROMPTS
 
 from gpt_prompts import BASE_SYSTEM_PROMPT, TARGET_PROMPTS
 
@@ -21,6 +23,7 @@ TG_ALLOWED_USERNAMES = {
 
 BASE_DIR = Path(__file__).resolve().parent
 APP_HTML_PATH = BASE_DIR / "app.html"
+APP_CSS_PATH = BASE_DIR / "app.css"
 
 app = FastAPI()
 
@@ -156,3 +159,9 @@ def translate(
 def app_page() -> HTMLResponse:
     html = APP_HTML_PATH.read_text(encoding="utf-8")
     return HTMLResponse(content=html)
+
+
+@app.get("/app.css", response_class=Response)
+def app_css() -> Response:
+    css = APP_CSS_PATH.read_text(encoding="utf-8")
+    return Response(content=css, media_type="text/css")
