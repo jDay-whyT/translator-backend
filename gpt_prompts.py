@@ -29,6 +29,10 @@ Important:
 - Do NOT show the intermediate Russian text.
 - Return ONLY the final translated text.
 - Do not add formatting, comments, or explanations.
+
+Output rules:
+- Do NOT add a period (.) at the end of the translated text.
+- If the original text does not end with punctuation, the translation must also end without punctuation.
 """.strip()
 
 
