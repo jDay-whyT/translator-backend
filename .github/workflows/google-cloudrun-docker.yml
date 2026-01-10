@@ -42,15 +42,13 @@ jobs:
           echo "IMAGE_URI=$IMAGE_URI" >> $GITHUB_ENV
 
       - id: deploy
-        name: Deploy to Cloud Run
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.SERVICE }}
-          region: ${{ env.REGION }}
-          image: ${{ env.IMAGE_URI }}
+  name: Deploy to Cloud Run
+  uses: google-github-actions/deploy-cloudrun@v2
+  with:
+    service: ${{ env.SERVICE }}
+    region: ${{ env.REGION }}
+    image: ${{ env.IMAGE_URI }}
 
-      - name: Show URL
-  run: |
-    echo "Service URL:"
-    echo "${{ steps.deploy.outputs.url }}"
+- name: Show URL
+  run: echo "Service URL: ${{ steps.deploy.outputs.url }}"
 
