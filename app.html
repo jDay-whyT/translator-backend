@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <title>Translator Demo</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     body { font-family: Arial, sans-serif; margin: 16px; }
     textarea { width: 100%; min-height: 120px; }
@@ -17,8 +18,7 @@
   <h1>Translator Demo</h1>
 
   <div class="row">
-    <label>Shared Secret (X-APP-KEY):</label><br>
-    <input id="appKey" type="password" style="width: 100%;" placeholder="Enter APP_SHARED_SECRET">
+    <div id="debug" style="font-size: 12px; opacity: 0.8;"></div>
   </div>
 
   <div class="row">
@@ -46,12 +46,93 @@
   </div>
 
   <script>
-    window.translate = async function(target) {
-      const text = document.getElementById("inputText").value || "";
-      const key = document.getElementById("appKey").value || "";
-      const status = document.getElementById("status");
-      const output = document.getElementById("output");
+    window.translate = window.translate || function(){ console.error("translate not initialized"); };
+    window.copyOutput = window.copyOutput || function(){};
+
+    const tg = window.Telegram?.WebApp;
+    tg?.ready?.();
+    tg?.expand?.();
+
+    const status = document.getElementById("status");
+    const output = document.getElementById("output");
+    const inputText = document.getElementById("inputText");
+    const debug = document.getElementById("debug");
+    const translateButtons = document.querySelectorAll(".buttons button:not(:last-child)");
+    const debugState = {
+      last_action: "",
+      last_http_status: ""
+    };
+
+    const applyTheme = () => {
+      const theme = tg?.themeParams || {};
+      if (theme.bg_color) {
+        document.body.style.backgroundColor = theme.bg_color;
+      }
+      if (theme.text_color) {
+        document.body.style.color = theme.text_color;
+        inputText.style.color = theme.text_color;
+        output.style.color = theme.text_color;
+      }
+      if (theme.secondary_bg_color) {
+        inputText.style.backgroundColor = theme.secondary_bg_color;
+        output.style.backgroundColor = theme.secondary_bg_color;
+      }
+      if (theme.hint_color) {
+        inputText.style.borderColor = theme.hint_color;
+        output.style.borderColor = theme.hint_color;
+      }
+    };
+
+    const setTranslateButtonsDisabled = (disabled) => {
+      translateButtons.forEach((button) => {
+        button.disabled = disabled;
+      });
+    };
+
+    const hasValidInitData = () => Boolean(tg?.initData);
+
+    const updateTelegramState = () => {
+      if (!hasValidInitData()) {
+        status.textContent = "Открой в Telegram (Mini App)";
+        setTranslateButtonsDisabled(true);
+        return;
+      }
       status.textContent = "";
+      setTranslateButtonsDisabled(false);
+    };
+
+    const renderDebug = () => {
+      const tgPresent = Boolean(tg);
+      const initDataLen = tg?.initData ? tg.initData.length : 0;
+      const username = tg?.initDataUnsafe?.user?.username || "";
+      debug.textContent = [
+        `tg_present: ${tgPresent}`,
+        `initData_len: ${initDataLen}`,
+        `username: ${username}`,
+        `last_action: ${debugState.last_action}`,
+        `last_http_status: ${debugState.last_http_status}`
+      ].join(" | ");
+    };
+
+    applyTheme();
+    updateTelegramState();
+    renderDebug();
+
+    window.translate = async function(target) {
+      debugState.last_action = "clicked";
+      renderDebug();
+      if (!hasValidInitData()) {
+        debugState.last_action = "blocked:no_initData";
+        renderDebug();
+        updateTelegramState();
+        return;
+      }
+      debugState.last_action = "fetch_sent";
+      renderDebug();
+      const text = inputText.value || "";
+      let hadError = false;
+      setTranslateButtonsDisabled(true);
+      status.textContent = "Loading...";
       output.textContent = "";
 
       try {
@@ -59,28 +140,58 @@
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-APP-KEY": key
+            "X-TG-INITDATA": tg?.initData || ""
           },
           body: JSON.stringify({ text, target })
         });
+        debugState.last_http_status = res.status;
+        renderDebug();
 
         const data = await res.json();
         if (!res.ok) {
           status.textContent = "Request failed: " + (data.error || res.statusText);
+          hadError = true;
           return;
         }
         output.textContent = data.text || "";
+        output.scrollIntoView({ behavior: "smooth", block: "start" });
+        tg?.HapticFeedback?.impactOccurred?.("light");
       } catch (err) {
         status.textContent = "Request failed: " + err;
+        hadError = true;
+      } finally {
+        if (hasValidInitData()) {
+          if (!hadError) {
+            status.textContent = "";
+          }
+          setTranslateButtonsDisabled(false);
+        } else {
+          updateTelegramState();
+        }
       }
     };
 
-    window.copyOutput = function() {
-      const output = document.getElementById("output").textContent || "";
-      if (!output) {
+    window.copyOutput = async function() {
+      const outputText = output.textContent || "";
+      if (!outputText) {
         return;
       }
-      navigator.clipboard.writeText(output).catch(function() {});
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(outputText);
+          return;
+        } catch (err) {
+        }
+      }
+      const textarea = document.createElement("textarea");
+      textarea.value = outputText;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "absolute";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textarea);
     };
   </script>
 </body>
