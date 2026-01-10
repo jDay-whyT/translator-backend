@@ -11,7 +11,6 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 from gpt_prompts import BASE_SYSTEM_PROMPT, TARGET_PROMPTS
 
-from gpt_prompts import BASE_SYSTEM_PROMPT, TARGET_PROMPTS
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
@@ -152,7 +151,10 @@ def translate(
     except (KeyError, IndexError, TypeError):
         translated = ""
 
-    return JSONResponse(status_code=200, content={"text": translated})
+    return JSONResponse(
+        status_code=200,
+        content={"text": translated, "translation": translated},
+    )
 
 
 @app.get("/app", response_class=HTMLResponse)

@@ -6,85 +6,121 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 16px;
-      background: #ffffff;
-      color: #111111;
+    :root {
+      --bg: #ffffff;
+      --text: #000000;
+      --hint: #888888;
+      --sec-bg: #f2f2f2;
     }
-    .container {
+    body {
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      align-items: center;
+      padding: 16px;
       max-width: 720px;
-      margin: 0 auto;
+      margin-inline: auto;
     }
-    .buttons {
+    h1 {
+      font-size: 20px;
+      margin-bottom: 4px;
+    }
+    #status {
+      font-size: 14px;
+      color: var(--hint);
+      min-height: 20px;
+      margin-bottom: 12px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 100px;
+      border: 1px solid var(--hint);
+      border-radius: 8px;
+      background: var(--sec-bg);
+      color: var(--text);
+      padding: 10px;
+      font-size: 16px;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    .button-row {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
+      margin: 12px 0;
     }
     button {
+      flex: 1;
       padding: 10px 14px;
-      border: 1px solid #d0d0d0;
-      border-radius: 8px;
-      background: #f7f7f7;
-      cursor: pointer;
       font-size: 16px;
+      border-radius: 20px;
+      border: 1px solid var(--hint);
+      background: var(--sec-bg);
+      color: var(--text);
+      cursor: pointer;
+      transition: background 0.2s;
     }
     button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
-    textarea {
+    button.active {
+      background: var(--text);
+      color: var(--bg);
+    }
+    .group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+    }
+    .small-btn-row {
+      display: flex;
+      gap: 8px;
+    }
+    .control-row {
       width: 100%;
-      min-height: 120px;
-      padding: 10px;
-      border-radius: 8px;
-      border: 1px solid #d0d0d0;
-      resize: vertical;
-      box-sizing: border-box;
-      font-size: 16px;
-    }
-    .status {
-      color: #b00020;
-      min-height: 20px;
-    }
-    .hidden {
-      display: none;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 6px;
     }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Translator</h1>
-    <div id="status" class="status"></div>
+  <h1>Translator</h1>
+  <div id="status"></div>
 
-    <label for="inputText">Text</label>
-    <textarea id="inputText" placeholder="Enter text..."></textarea>
+  <textarea id="input" placeholder="Enter text"></textarea>
+  <div class="control-row">
+    <button id="pasteBtn">Paste</button>
+  </div>
 
-    <div class="buttons" id="primaryButtons">
-      <button data-target="ru">RU</button>
-      <button data-target="en">EN</button>
-      <button data-toggle="es">ES</button>
-      <button data-toggle="pt">PT</button>
+  <div class="button-row" id="langButtons">
+    <button data-lang="ru">RU</button>
+    <button data-lang="en">EN</button>
+    <div class="group">
+      <button data-group="es">ES</button>
+      <div class="small-btn-row" id="esSubs" style="display:none;">
+        <button data-lang="es-es">ES-ES</button>
+        <button data-lang="es-latam">ES-LATAM</button>
+      </div>
     </div>
-
-    <div class="buttons hidden" id="esButtons">
-      <button data-target="es-es">ES-ES</button>
-      <button data-target="es-latam">ES-LATAM</button>
+    <div class="group">
+      <button data-group="pt">PT</button>
+      <div class="small-btn-row" id="ptSubs" style="display:none;">
+        <button data-lang="pt-pt">PT-PT</button>
+        <button data-lang="pt-br">PT-BR</button>
+      </div>
     </div>
+  </div>
 
-    <div class="buttons hidden" id="ptButtons">
-      <button data-target="pt-pt">PT-PT</button>
-      <button data-target="pt-br">PT-BR</button>
-    </div>
-
-    <label for="outputText">Output</label>
-    <textarea id="outputText" readonly></textarea>
-
-    <button id="copyButton">Copy</button>
+  <textarea id="output" placeholder="Translation" readonly></textarea>
+  <div class="control-row">
+    <button id="copyBtn">Copy</button>
   </div>
 
   <script>
@@ -92,140 +128,154 @@
     tg?.ready?.();
     tg?.expand?.();
 
-    const statusEl = document.getElementById("status");
-    const inputText = document.getElementById("inputText");
-    const outputText = document.getElementById("outputText");
-    const copyButton = document.getElementById("copyButton");
-    const allButtons = document.querySelectorAll("button");
-    const toggleButtons = document.querySelectorAll("[data-toggle]");
-    const targetButtons = document.querySelectorAll("[data-target]");
-    const esButtons = document.getElementById("esButtons");
-    const ptButtons = document.getElementById("ptButtons");
+    const theme = tg?.themeParams || {};
+    document.documentElement.style.setProperty('--bg', theme.bg_color || '#fff');
+    document.documentElement.style.setProperty('--text', theme.text_color || '#000');
+    document.documentElement.style.setProperty('--hint', theme.hint_color || '#888');
+    document.documentElement.style.setProperty('--sec-bg', theme.secondary_bg_color || '#f2f2f2');
 
-    const getInitData = () => tg?.initData || "";
+    const statusEl = document.getElementById('status');
+    const inputEl = document.getElementById('input');
+    const outputEl = document.getElementById('output');
+    const pasteBtn = document.getElementById('pasteBtn');
+    const copyBtn = document.getElementById('copyBtn');
+    const langButtons = document.getElementById('langButtons');
+    const esSubs = document.getElementById('esSubs');
+    const ptSubs = document.getElementById('ptSubs');
+    const translateButtons = document.querySelectorAll('[data-lang], [data-group]');
+    const languageButtons = document.querySelectorAll('[data-lang]');
 
-    const setAllButtonsDisabled = (disabled) => {
-      allButtons.forEach((button) => {
+    const hasInitData = () => Boolean(tg?.initData);
+
+    if (!hasInitData()) {
+      translateButtons.forEach((button) => {
+        button.disabled = true;
+      });
+      statusEl.textContent = 'Открой в Telegram (Mini App)';
+    }
+
+    const setStatus = (message) => {
+      statusEl.textContent = message || '';
+    };
+
+    const clearActive = () => {
+      languageButtons.forEach((button) => button.classList.remove('active'));
+    };
+
+    const setTranslateDisabled = (disabled) => {
+      translateButtons.forEach((button) => {
         button.disabled = disabled;
       });
     };
 
-    const hideSubButtons = () => {
-      esButtons.classList.add("hidden");
-      ptButtons.classList.add("hidden");
-    };
-
-    const ensureTelegram = () => {
-      if (!tg || !getInitData()) {
-        statusEl.textContent = "Открой в Telegram (Mini App)";
-        setAllButtonsDisabled(true);
-        return false;
+    const toggleGroup = (group) => {
+      if (group === 'es') {
+        const isOpen = esSubs.style.display !== 'none';
+        esSubs.style.display = isOpen ? 'none' : 'flex';
+        ptSubs.style.display = 'none';
+        return;
       }
-      return true;
-    };
-
-    const resetUiState = () => {
-      if (ensureTelegram()) {
-        statusEl.textContent = "";
-        setAllButtonsDisabled(false);
+      if (group === 'pt') {
+        const isOpen = ptSubs.style.display !== 'none';
+        ptSubs.style.display = isOpen ? 'none' : 'flex';
+        esSubs.style.display = 'none';
       }
     };
 
     const translate = async (target) => {
-      if (!ensureTelegram()) {
+      if (!hasInitData()) {
+        setStatus('Открой в Telegram (Mini App)');
+        setTranslateDisabled(true);
         return;
       }
-
-      setAllButtonsDisabled(true);
-      statusEl.textContent = "Loading...";
-      outputText.value = "";
-
+      const text = inputEl.value.trim();
+      if (!text) {
+        setStatus('No text to translate');
+        return;
+      }
       try {
-        const res = await fetch("/api/translate", {
-          method: "POST",
+        setTranslateDisabled(true);
+        setStatus('Loading...');
+        const res = await fetch('/api/translate', {
+          method: 'POST',
           headers: {
-            "Content-Type": "application/json",
-            "X-TG-INITDATA": getInitData()
+            'Content-Type': 'application/json',
+            'X-TG-INITDATA': tg?.initData || ''
           },
           body: JSON.stringify({
             text: inputText.value || "",
             target
           })
         });
-
-        const data = await res.json().catch(() => ({}));
+        let data = {};
+        try {
+          data = await res.json();
+        } catch (err) {
+          data = {};
+        }
         if (!res.ok) {
-          statusEl.textContent = "Request failed: " + (data.error || res.statusText);
+          setStatus(data.error || res.statusText || 'Request failed');
           return;
         }
-
-        outputText.value = data.text || data.translation || "";
-        outputText.scrollIntoView({ behavior: "smooth", block: "start" });
-        tg?.HapticFeedback?.impactOccurred?.("light");
-        statusEl.textContent = "";
+        outputEl.value = data.text || data.translation || '';
+        outputEl.scrollIntoView({ behavior: 'smooth' });
+        setStatus('');
+        tg?.HapticFeedback?.impactOccurred?.('light');
       } catch (err) {
-        statusEl.textContent = "Request failed: " + err;
+        setStatus('Request failed');
       } finally {
-        resetUiState();
+        setTranslateDisabled(false);
       }
     };
 
-    const copyOutput = async () => {
-      const text = outputText.value || "";
+    langButtons.addEventListener('click', (event) => {
+      const button = event.target.closest('button');
+      if (!button) {
+        return;
+      }
+      const group = button.dataset.group;
+      const lang = button.dataset.lang;
+      if (group) {
+        toggleGroup(group);
+        return;
+      }
+      if (lang) {
+        clearActive();
+        button.classList.add('active');
+        esSubs.style.display = 'none';
+        ptSubs.style.display = 'none';
+        translate(lang);
+      }
+    });
+
+    pasteBtn.addEventListener('click', async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        inputEl.value = text;
+        setStatus('');
+      } catch (err) {
+        setStatus('Clipboard unavailable. Use long-press -> Paste.');
+      }
+    });
+
+    copyBtn.addEventListener('click', async () => {
+      const text = outputEl.value;
       if (!text) {
         return;
       }
-      if (navigator.clipboard?.writeText) {
-        try {
-          await navigator.clipboard.writeText(text);
-          return;
-        } catch (err) {
-        }
+      try {
+        await navigator.clipboard.writeText(text);
+        setStatus('Copied');
+      } catch (err) {
+        const tmp = document.createElement('textarea');
+        tmp.value = text;
+        document.body.appendChild(tmp);
+        tmp.select();
+        document.execCommand('copy');
+        document.body.removeChild(tmp);
+        setStatus('Copied');
       }
-      const textarea = document.createElement("textarea");
-      textarea.value = text;
-      textarea.setAttribute("readonly", "");
-      textarea.style.position = "absolute";
-      textarea.style.left = "-9999px";
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textarea);
-    };
-
-    toggleButtons.forEach((button) => {
-      button.addEventListener("click", () => {
-        if (!ensureTelegram()) {
-          return;
-        }
-        const toggle = button.dataset.toggle;
-        if (toggle === "es") {
-          esButtons.classList.toggle("hidden");
-          ptButtons.classList.add("hidden");
-          return;
-        }
-        if (toggle === "pt") {
-          ptButtons.classList.toggle("hidden");
-          esButtons.classList.add("hidden");
-        }
-      });
     });
-
-    targetButtons.forEach((button) => {
-      button.addEventListener("click", () => {
-        hideSubButtons();
-        translate(button.dataset.target);
-      });
-    });
-
-    copyButton.addEventListener("click", () => {
-      copyOutput();
-    });
-
-    hideSubButtons();
-    if (ensureTelegram()) {
-      setAllButtonsDisabled(false);
-    }
   </script>
 </body>
 </html>
