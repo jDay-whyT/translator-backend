@@ -57,6 +57,30 @@
       resize: vertical;
       box-sizing: border-box;
     }
+    .input-wrap {
+      position: relative;
+      width: 100%;
+      margin-top: 10px;
+    }
+    .clear-input {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: none;
+      background: transparent;
+      color: var(--hint);
+      opacity: 0.5;
+      font-size: 18px;
+      line-height: 1;
+      padding: 0;
+      cursor: pointer;
+    }
+    .clear-input:active {
+      background: rgba(0, 0, 0, 0.06);
+    }
     .button-row {
       display: flex;
       flex-wrap: wrap;
@@ -104,18 +128,20 @@
       margin-top: 6px;
     }
     .toolbar-row button {
-      padding: 6px 10px;
       font-size: 13px;
-      border-radius: 14px;
+      height: 32px;
+    }
+    .toolbar-row {
+      margin-bottom: 10px;
     }
   </style>
 </head>
 <body>
   <h1>ur gpt assist translate</h1>
 
-  <div class="control-row toolbar-row">
-    <button id="pasteBtn">Paste</button>
-    <button id="clearBtn">Clear</button>
+  <div class="input-wrap">
+    <textarea id="input" placeholder="Enter text"></textarea>
+    <button id="clearInputBtn" class="clear-input" aria-label="Clear input" hidden>&times;</button>
   </div>
   <textarea id="input" placeholder="Enter text"></textarea>
 
@@ -146,8 +172,7 @@
     const statusEl = document.getElementById('status');
     const inputEl = document.getElementById('input');
     const outputEl = document.getElementById('output');
-    const pasteBtn = document.getElementById('pasteBtn');
-    const clearBtn = document.getElementById('clearBtn');
+    const clearInputBtn = document.getElementById('clearInputBtn');
     const copyBtn = document.getElementById('copyBtn');
     const langButtons = document.getElementById('langButtons');
     let translateButtons = [];
@@ -284,52 +309,19 @@
 
     langButtons.addEventListener('click', handleLangClick);
 
-    const readClipboardText = () => new Promise((resolve, reject) => {
-      if (tg?.readTextFromClipboard) {
-        tg.readTextFromClipboard((text) => {
-          if (text) {
-            resolve(text);
-          } else {
-            reject(new Error('Empty clipboard'));
-          }
-        });
-        return;
-      }
-      reject(new Error('Telegram clipboard unavailable'));
-    });
-
-    const pasteFromClipboard = async () => {
-      inputEl.focus();
-      inputEl.selectionStart = inputEl.value.length;
-      inputEl.selectionEnd = inputEl.value.length;
-      let text = '';
-      try {
-        text = await readClipboardText();
-      } catch (err) {
-        try {
-          text = await navigator.clipboard.readText();
-        } catch (errTwo) {
-          setStatus('Clipboard blocked on iOS. Long-press in the input and tap Paste.');
-          return;
-        }
-      }
-      if (text) {
-        inputEl.value = text;
-        outputEl.value = '';
-        setStatus('');
-        tg?.HapticFeedback?.impactOccurred?.('light');
-      }
+    const updateClearVisibility = () => {
+      clearInputBtn.hidden = !inputEl.value.trim();
     };
 
-    pasteBtn.addEventListener('click', pasteFromClipboard);
-
-    clearBtn.addEventListener('click', () => {
+    clearInputBtn.addEventListener('click', () => {
       inputEl.value = '';
       outputEl.value = '';
       setStatus('');
       inputEl.focus();
       tg?.HapticFeedback?.impactOccurred?.('light');
     });
+
+    inputEl.addEventListener('input', updateClearVisibility);
 
     copyBtn.addEventListener('click', async () => {
       const text = outputEl.value;
@@ -351,6 +343,7 @@
     });
 
     renderLangButtons('base');
+    updateClearVisibility();
   </script>
 </body>
 </html>
