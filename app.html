@@ -25,14 +25,22 @@
       margin-inline: auto;
     }
     h1 {
-      font-size: 20px;
-      margin-bottom: 4px;
+      font-size: 13px;
+      margin: 0 0 6px;
+      color: var(--hint);
+      opacity: 0.8;
+      font-weight: 500;
     }
     #status {
-      font-size: 14px;
+      font-size: 12px;
       color: var(--hint);
-      min-height: 20px;
-      margin-bottom: 12px;
+      min-height: 16px;
+      margin-top: 10px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      word-break: break-word;
     }
     textarea {
       width: 100%;
@@ -88,40 +96,34 @@
       gap: 8px;
       margin-top: 6px;
     }
+    .toolbar-row button {
+      padding: 6px 10px;
+      font-size: 13px;
+      border-radius: 14px;
+    }
   </style>
 </head>
 <body>
-  <h1>Translator</h1>
-  <div id="status"></div>
+  <h1>ur gpt assist translate</h1>
 
-  <textarea id="input" placeholder="Enter text"></textarea>
-  <div class="control-row">
+  <div class="control-row toolbar-row">
     <button id="pasteBtn">Paste</button>
+    <button id="clearBtn">Clear</button>
   </div>
+  <textarea id="input" placeholder="Enter text"></textarea>
 
   <div class="button-row" id="langButtons">
     <button data-lang="ru">RU</button>
     <button data-lang="en">EN</button>
-    <div class="group">
-      <button data-group="es">ES</button>
-      <div class="small-btn-row" id="esSubs" style="display:none;">
-        <button data-lang="es-es">ES-ES</button>
-        <button data-lang="es-latam">ES-LATAM</button>
-      </div>
-    </div>
-    <div class="group">
-      <button data-group="pt">PT</button>
-      <div class="small-btn-row" id="ptSubs" style="display:none;">
-        <button data-lang="pt-pt">PT-PT</button>
-        <button data-lang="pt-br">PT-BR</button>
-      </div>
-    </div>
+    <button data-group="es">ES</button>
+    <button data-group="pt">PT</button>
   </div>
 
   <textarea id="output" placeholder="Translation" readonly></textarea>
   <div class="control-row">
     <button id="copyBtn">Copy</button>
   </div>
+  <div id="status"></div>
 
   <script>
     const tg = window.Telegram?.WebApp;
@@ -138,24 +140,23 @@
     const inputEl = document.getElementById('input');
     const outputEl = document.getElementById('output');
     const pasteBtn = document.getElementById('pasteBtn');
+    const clearBtn = document.getElementById('clearBtn');
     const copyBtn = document.getElementById('copyBtn');
     const langButtons = document.getElementById('langButtons');
-    const esSubs = document.getElementById('esSubs');
-    const ptSubs = document.getElementById('ptSubs');
-    const translateButtons = document.querySelectorAll('[data-lang], [data-group]');
-    const languageButtons = document.querySelectorAll('[data-lang]');
+    let translateButtons = [];
+    let languageButtons = [];
+    let lastStatus = '';
+    let selectedLang = 'ru';
 
     const hasInitData = () => Boolean(tg?.initData);
 
-    if (!hasInitData()) {
-      translateButtons.forEach((button) => {
-        button.disabled = true;
-      });
-      statusEl.textContent = 'Открой в Telegram (Mini App)';
-    }
-
     const setStatus = (message) => {
-      statusEl.textContent = message || '';
+      const nextMessage = message || '';
+      if (nextMessage === lastStatus) {
+        return;
+      }
+      statusEl.textContent = nextMessage;
+      lastStatus = nextMessage;
     };
 
     const clearActive = () => {
@@ -168,17 +169,37 @@
       });
     };
 
-    const toggleGroup = (group) => {
-      if (group === 'es') {
-        const isOpen = esSubs.style.display !== 'none';
-        esSubs.style.display = isOpen ? 'none' : 'flex';
-        ptSubs.style.display = 'none';
-        return;
+    const renderLangButtons = (mode = 'base') => {
+      if (mode === 'es') {
+        langButtons.innerHTML = `
+          <button data-lang="es-es">ES-ES</button>
+          <button data-lang="es-latam">ES-LATAM</button>
+          <button data-action="back">Back</button>
+        `;
+      } else if (mode === 'pt') {
+        langButtons.innerHTML = `
+          <button data-lang="pt-pt">PT-PT</button>
+          <button data-lang="pt-br">PT-BR</button>
+          <button data-action="back">Back</button>
+        `;
+      } else {
+        langButtons.innerHTML = `
+          <button data-lang="ru">RU</button>
+          <button data-lang="en">EN</button>
+          <button data-group="es">ES</button>
+          <button data-group="pt">PT</button>
+        `;
       }
-      if (group === 'pt') {
-        const isOpen = ptSubs.style.display !== 'none';
-        ptSubs.style.display = isOpen ? 'none' : 'flex';
-        esSubs.style.display = 'none';
+      translateButtons = Array.from(langButtons.querySelectorAll('button'));
+      languageButtons = Array.from(langButtons.querySelectorAll('[data-lang]'));
+      clearActive();
+      const activeButton = languageButtons.find((button) => button.dataset.lang === selectedLang);
+      if (activeButton) {
+        activeButton.classList.add('active');
+      }
+      if (!hasInitData()) {
+        setTranslateDisabled(true);
+        setStatus('Открой в Telegram (Mini App)');
       }
     };
 
@@ -214,7 +235,8 @@
           data = {};
         }
         if (!res.ok) {
-          setStatus(data.error || res.statusText || 'Request failed');
+          const message = data.error || res.statusText || 'Request failed';
+          setStatus(`Request failed (HTTP ${res.status}): ${message}`);
           return;
         }
         outputEl.value = data.text || data.translation || '';
@@ -228,34 +250,74 @@
       }
     };
 
-    langButtons.addEventListener('click', (event) => {
+    const handleLangClick = (event) => {
       const button = event.target.closest('button');
       if (!button) {
         return;
       }
+      const action = button.dataset.action;
       const group = button.dataset.group;
       const lang = button.dataset.lang;
+      if (action === 'back') {
+        renderLangButtons('base');
+        return;
+      }
       if (group) {
-        toggleGroup(group);
+        renderLangButtons(group);
         return;
       }
       if (lang) {
         clearActive();
         button.classList.add('active');
-        esSubs.style.display = 'none';
-        ptSubs.style.display = 'none';
+        selectedLang = lang;
         translate(lang);
+        renderLangButtons('base');
       }
+    };
+
+    langButtons.addEventListener('click', handleLangClick);
+
+    const readClipboardText = () => new Promise((resolve, reject) => {
+      if (tg?.readTextFromClipboard) {
+        tg.readTextFromClipboard((text) => {
+          if (text) {
+            resolve(text);
+          } else {
+            reject(new Error('Empty clipboard'));
+          }
+        });
+        return;
+      }
+      reject(new Error('Telegram clipboard unavailable'));
     });
 
-    pasteBtn.addEventListener('click', async () => {
+    const pasteFromClipboard = async () => {
+      let text = '';
       try {
-        const text = await navigator.clipboard.readText();
-        inputEl.value = text;
-        setStatus('');
+        text = await readClipboardText();
       } catch (err) {
-        setStatus('Clipboard unavailable. Use long-press -> Paste.');
+        try {
+          text = await navigator.clipboard.readText();
+        } catch (errTwo) {
+          setStatus('Clipboard blocked. Long-press in the input and tap Paste.');
+          return;
+        }
       }
+      inputEl.value = text;
+      outputEl.value = '';
+      setStatus('');
+      inputEl.focus();
+      tg?.HapticFeedback?.impactOccurred?.('light');
+    };
+
+    pasteBtn.addEventListener('click', pasteFromClipboard);
+
+    clearBtn.addEventListener('click', () => {
+      inputEl.value = '';
+      outputEl.value = '';
+      setStatus('');
+      inputEl.focus();
+      tg?.HapticFeedback?.impactOccurred?.('light');
     });
 
     copyBtn.addEventListener('click', async () => {
@@ -276,6 +338,8 @@
         setStatus('Copied');
       }
     });
+
+    renderLangButtons('base');
   </script>
 </body>
 </html>
