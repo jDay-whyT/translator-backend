@@ -5,6 +5,8 @@ from typing import Optional
 from urllib.parse import parse_qs
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -33,6 +35,25 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _create_session() -> requests.Session:
+    retry = Retry(
+        total=3,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods={"POST"},
+        backoff_factor=0.6,
+        respect_retry_after_header=True,
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session = requests.Session()
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+
+OPENAI_SESSION = _create_session()
 
 
 def _key_prefix(key: str) -> Optional[str]:
@@ -114,14 +135,14 @@ def translate(
     }
 
     try:
-        response = requests.post(
+        response = OPENAI_SESSION.post(
             "https://api.openai.com/v1/chat/completions",
             headers={
                 "Authorization": f"Bearer {OPENAI_API_KEY}",
                 "Content-Type": "application/json",
             },
             json=body,
-            timeout=30,
+            timeout=(3, 20),
         )
     except requests.RequestException as exc:
         return JSONResponse(
