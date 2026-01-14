@@ -16,6 +16,7 @@ from gpt_prompts import BASE_SYSTEM_PROMPT, TARGET_PROMPTS
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+DEEPL_API_KEY = os.getenv("DEEPL_API_KEY", "")
 TG_ALLOWED_USERNAMES = {
     value.strip().lower()
     for value in os.getenv("TG_ALLOWED_USERNAMES", "").split(",")
@@ -54,6 +55,7 @@ def _create_session() -> requests.Session:
 
 
 OPENAI_SESSION = _create_session()
+DEEPL_SESSION = _create_session()
 
 
 def _key_prefix(key: str) -> Optional[str]:
@@ -119,10 +121,14 @@ def translate(
     if target not in TARGET_PROMPTS:
         return JSONResponse(status_code=400, content={"error": "Unsupported target"})
 
-    if not OPENAI_API_KEY:
-        return JSONResponse(
-            status_code=500, content={"error": "OPENAI_API_KEY is missing"}
-        )
+    deepl_target = {
+        "en": "EN",
+        "ru": "RU",
+        "es-es": "ES",
+        "es-latam": "ES",
+        "pt-br": "PT-BR",
+        "pt-pt": "PT-PT",
+    }.get(target)
 
     system_prompt = f"{BASE_SYSTEM_PROMPT}\n{TARGET_PROMPTS[target]}"
     body = {
@@ -134,47 +140,106 @@ def translate(
         ],
     }
 
-    try:
-        response = OPENAI_SESSION.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENAI_API_KEY}",
-                "Content-Type": "application/json",
+    translated = ""
+    openai_error = None
+    if OPENAI_API_KEY:
+        try:
+            response = OPENAI_SESSION.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=body,
+                timeout=(3, 20),
+            )
+            if response.status_code != 200:
+                openai_error = {
+                    "status": response.status_code,
+                    "details": response.text[:1000],
+                }
+            else:
+                try:
+                    data = response.json()
+                except json.JSONDecodeError:
+                    openai_error = {"status": response.status_code, "details": "json"}
+                else:
+                    if data.get("error"):
+                        openai_error = {
+                            "status": response.status_code,
+                            "details": str(data.get("error")),
+                        }
+                    else:
+                        try:
+                            choice = data["choices"][0]
+                            translated = choice["message"]["content"].strip()
+                            finish_reason = choice.get("finish_reason")
+                        except (KeyError, IndexError, TypeError):
+                            translated = ""
+                            finish_reason = None
+                        if finish_reason in {"content_filter", "policy"}:
+                            translated = ""
+        except requests.RequestException as exc:
+            openai_error = {"status": 0, "details": str(exc)}
+
+    if translated:
+        return JSONResponse(
+            status_code=200,
+            content={"text": translated, "translation": translated, "provider": "openai"},
+        )
+
+    if not DEEPL_API_KEY:
+        return JSONResponse(
+            status_code=502,
+            content={
+                "error": "OpenAI error; DEEPL_API_KEY is missing",
+                "status": (openai_error or {}).get("status", 0),
+                "details": (openai_error or {}).get("details", ""),
             },
-            json=body,
+        )
+
+    try:
+        deepl_response = DEEPL_SESSION.post(
+            "https://api-free.deepl.com/v2/translate",
+            headers={"Authorization": f"DeepL-Auth-Key {DEEPL_API_KEY}"},
+            data={"text": text, "target_lang": deepl_target},
             timeout=(3, 20),
         )
     except requests.RequestException as exc:
         return JSONResponse(
             status_code=502,
-            content={
-                "error": "OpenAI error",
-                "status": 0,
-                "details": str(exc),
-            },
+            content={"error": "DeepL error", "status": 0, "details": str(exc)},
         )
 
-    if response.status_code != 200:
-        details = response.text[:1000]
+    if deepl_response.status_code != 200:
         return JSONResponse(
             status_code=502,
             content={
-                "error": "OpenAI error",
-                "status": response.status_code,
-                "details": details,
+                "error": "DeepL error",
+                "status": deepl_response.status_code,
+                "details": deepl_response.text[:1000],
             },
         )
 
-    data = response.json()
-    translated = ""
     try:
-        translated = data["choices"][0]["message"]["content"].strip()
-    except (KeyError, IndexError, TypeError):
-        translated = ""
+        deepl_data = deepl_response.json()
+        deepl_translated = deepl_data["translations"][0]["text"].strip()
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError):
+        deepl_translated = ""
+
+    if not deepl_translated:
+        return JSONResponse(
+            status_code=502,
+            content={"error": "DeepL error", "status": deepl_response.status_code},
+        )
 
     return JSONResponse(
         status_code=200,
-        content={"text": translated, "translation": translated},
+        content={
+            "text": deepl_translated,
+            "translation": deepl_translated,
+            "provider": "deepl",
+        },
     )
 
 
