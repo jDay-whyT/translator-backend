@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from pathlib import Path
 from typing import Optional
 from urllib.parse import parse_qs
@@ -57,6 +58,16 @@ def _create_session() -> requests.Session:
 OPENAI_SESSION = _create_session()
 DEEPL_SESSION = _create_session()
 
+NSFW_PATTERN = re.compile(
+    r"\b("
+    r"sex|fuck\w*|blowjob|anal|porn\w*|nude\w*|pussy|dick|cock|cum"
+    r"|секс|трах\w*|еб\w*|минет|анал|порн\w*"
+    r"|sexo|follar\w*|mamada\w*|polla|coño|anal|porno"
+    r"|sexo|foder\w*|boquete|buceta|pau|caralho|anal|porno"
+    r")\b",
+    re.IGNORECASE,
+)
+
 
 def _key_prefix(key: str) -> Optional[str]:
     if not key:
@@ -79,6 +90,12 @@ def _parse_username_from_init_data(init_data: str) -> Optional[str]:
     if not username:
         return None
     return str(username)
+
+
+def should_use_deepl(text: str) -> bool:
+    if not text:
+        return False
+    return bool(NSFW_PATTERN.search(text))
 
 
 def require_access(x_tg_initdata: Optional[str] = Header(None)) -> None:
@@ -142,7 +159,10 @@ def translate(
 
     translated = ""
     openai_error = None
-    if OPENAI_API_KEY:
+    use_deepl_only = should_use_deepl(text)
+    if use_deepl_only:
+        openai_error = {"status": 0, "details": "skipped"}
+    elif OPENAI_API_KEY:
         try:
             response = OPENAI_SESSION.post(
                 "https://api.openai.com/v1/chat/completions",
@@ -177,8 +197,21 @@ def translate(
                         except (KeyError, IndexError, TypeError):
                             translated = ""
                             finish_reason = None
-                        if finish_reason in {"content_filter", "policy"}:
+                            openai_error = {
+                                "status": response.status_code,
+                                "details": "malformed response",
+                            }
+                        if finish_reason == "content_filter":
                             translated = ""
+                            openai_error = {
+                                "status": response.status_code,
+                                "details": "content_filter",
+                            }
+                        elif not translated:
+                            openai_error = {
+                                "status": response.status_code,
+                                "details": "empty response",
+                            }
         except requests.RequestException as exc:
             openai_error = {"status": 0, "details": str(exc)}
 
@@ -192,7 +225,7 @@ def translate(
         return JSONResponse(
             status_code=502,
             content={
-                "error": "OpenAI error; DEEPL_API_KEY is missing",
+                "error": "DEEPL_API_KEY is missing",
                 "status": (openai_error or {}).get("status", 0),
                 "details": (openai_error or {}).get("details", ""),
             },
