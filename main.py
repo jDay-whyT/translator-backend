@@ -255,14 +255,13 @@ def translate(
                                     "status": response.status_code,
                                     "details": "content_filter",
                                 }
+                                fallback_reason = "content_filter"
                             elif not translated:
                                 fallback_reason = "empty"
             except requests.RequestException as exc:
                 openai_error = {"status": 0, "details": str(exc)}
 
-    if finish_reason == "content_filter":
-        fallback_reason = "content_filter"
-    elif translated:
+    if translated:
         if len(text) > 80 and len(translated) < 12:
             fallback_reason = "too_short"
             translated = ""
