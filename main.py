@@ -68,18 +68,6 @@ NSFW_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-def is_bad_translation(src_text: str, out_text: str) -> tuple[bool, Optional[str]]:
-    if not out_text:
-        return True, "empty"
-    src_len = len(src_text)
-    out_len = len(out_text)
-    if src_len > 60 and out_len < max(12, int(src_len * 0.12)):
-        return True, "too_short"
-    if src_len > 60 and out_len > int(src_len * 2.8):
-        return True, "too_long"
-    return False, None
-
-
 def _key_prefix(key: str) -> Optional[str]:
     if not key:
         return None
@@ -174,65 +162,64 @@ def translate(
     fallback_reason = None
     use_deepl_only = should_use_deepl(text)
     if use_deepl_only:
-        openai_error = {"status": 0, "details": "skipped"}
         fallback_reason = "nsfw_router"
-    elif OPENAI_API_KEY:
-        try:
-            response = OPENAI_SESSION.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {OPENAI_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json=body,
-                timeout=(3, 20),
-            )
-            if response.status_code != 200:
-                openai_error = {
-                    "status": response.status_code,
-                    "details": response.text[:1000],
-                }
-            else:
-                try:
-                    data = response.json()
-                except json.JSONDecodeError:
-                    openai_error = {"status": response.status_code, "details": "json"}
+    else:
+        if not OPENAI_API_KEY:
+            openai_error = {"status": 0, "details": "missing_api_key"}
+        else:
+            try:
+                response = OPENAI_SESSION.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {OPENAI_API_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json=body,
+                    timeout=(3, 20),
+                )
+                if response.status_code != 200:
+                    openai_error = {
+                        "status": response.status_code,
+                        "details": response.text[:1000],
+                    }
                 else:
-                    if data.get("error"):
-                        openai_error = {
-                            "status": response.status_code,
-                            "details": str(data.get("error")),
-                        }
+                    try:
+                        data = response.json()
+                    except json.JSONDecodeError:
+                        openai_error = {"status": response.status_code, "details": "json"}
                     else:
-                        try:
-                            choice = data["choices"][0]
-                            translated = choice["message"]["content"].strip()
-                            finish_reason = choice.get("finish_reason")
-                        except (KeyError, IndexError, TypeError):
-                            translated = ""
-                            finish_reason = None
+                        if data.get("error"):
                             openai_error = {
                                 "status": response.status_code,
-                                "details": "malformed response",
+                                "details": str(data.get("error")),
                             }
-                        if finish_reason == "content_filter":
-                            translated = ""
-                            openai_error = {
-                                "status": response.status_code,
-                                "details": "content_filter",
-                            }
-                        elif not translated:
-                            openai_error = {
-                                "status": response.status_code,
-                                "details": "empty response",
-                            }
-        except requests.RequestException as exc:
-            openai_error = {"status": 0, "details": str(exc)}
+                        else:
+                            try:
+                                choice = data["choices"][0]
+                                translated = choice["message"]["content"].strip()
+                                finish_reason = choice.get("finish_reason")
+                            except (KeyError, IndexError, TypeError):
+                                translated = ""
+                                finish_reason = None
+                                openai_error = {
+                                    "status": response.status_code,
+                                    "details": "malformed response",
+                                }
+                            if finish_reason == "content_filter":
+                                translated = ""
+                            elif not translated:
+                                fallback_reason = "empty"
+            except requests.RequestException as exc:
+                openai_error = {"status": 0, "details": str(exc)}
 
-    if translated:
-        bad_translation, bad_reason = is_bad_translation(text, translated)
-        if bad_translation:
-            fallback_reason = bad_reason
+    if finish_reason == "content_filter":
+        fallback_reason = "content_filter"
+    elif translated:
+        if len(text) > 80 and len(translated) < 12:
+            fallback_reason = "too_short"
+            translated = ""
+        elif len(text) > 120 and len(translated) < int(len(text) * 0.08):
+            fallback_reason = "too_short"
             translated = ""
         else:
             print("provider_used=openai fallback_reason=None")
@@ -249,15 +236,7 @@ def translate(
             )
 
     if not translated and not fallback_reason:
-        if openai_error:
-            if openai_error.get("details") == "content_filter":
-                fallback_reason = "content_filter"
-            elif openai_error.get("details") == "empty response":
-                fallback_reason = "empty"
-            else:
-                fallback_reason = "openai_error"
-        else:
-            fallback_reason = "openai_error"
+        fallback_reason = "openai_error"
 
     if not translated:
         print(f"provider_used=deepl fallback_reason={fallback_reason}")
