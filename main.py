@@ -59,13 +59,57 @@ OPENAI_SESSION = _create_session()
 DEEPL_SESSION = _create_session()
 
 NSFW_PATTERN = re.compile(
-    r"\b("
-    r"sex|fuck\w*|blowjob|anal|porn\w*|nude\w*|pussy|dick|cock|cum"
-    r"|секс|трах\w*|еб\w*|минет|анал|порн\w*"
-    r"|sexo|follar\w*|mamada\w*|polla|coño|anal|porno"
-    r"|sexo|foder\w*|boquete|buceta|pau|caralho|anal|porno"
-    r")\b",
-    re.IGNORECASE,
+    r"(?ix)"
+    r"(?:^|[^\w])"
+    r"("
+
+    # ---------------- EN ----------------
+    r"sex\b|sext\w*|sexchat\b|"
+    r"porn\w*|xxx\b|onlyfans\b|"
+    r"nude\w*|nsfw\b|"
+    r"blow\s*job|blowjob\b|"
+    r"hand\s*job|handjob\b|"
+    r"anal\b|rimjob\b|"
+    r"pussy\b|dick\b|cock\b|"
+    r"cum\b|cumming\b|orgasm\w*|"
+    r"dildo\b|"
+    r"tits?\b|boobs?\b|breasts?\b|"
+
+    # ---------------- RU ----------------
+    r"|секс\w*|порно\w*|онлифанс\w*|"
+    r"нюд\w*|nsfw\b|"
+    r"анал\w*|минет\w*|оральн\w*|"
+    r"дроч\w*|мастурб\w*|оргазм\w*|"
+    r"пизд\w*|киск\w*|"
+    r"хуй\w*|член\w*|пенис\w*|"
+    r"сос\w*|"
+    r"дилдо\w*|"
+    r"сиськ\w*|титьк\w*|груд\w*|"
+    r"конч\w*|"
+    r"трах\w*|"
+
+    # ---------------- ES ----------------
+    r"|sexo\w*|porno\w*|nsfw\b|xxx\b|onlyfans\b|"
+    r"desn?ud\w*|"
+    r"mamada\w*|oral\b|"
+    r"anal\b|"
+    r"polla\w*|coñ\w*|"
+    r"corrid\w*|venirse\b|orgasm\w*|"
+    r"dildo\b|"
+    r"tetas?\b|pechos?\b|"
+
+    # ---------------- PT ----------------
+    r"|sexo\w*|porno\w*|nsfw\b|xxx\b|onlyfans\b|"
+    r"nua?\w*|pelad\w*|"
+    r"boquete\w*|oral\b|"
+    r"anal\b|"
+    r"bucet\w*|pau\b|caralh\w*|"
+    r"gozad\w*|goz\w*|orgasm\w*|"
+    r"dildo\b|"
+    r"tetas?\b|peitos?\b|seios?\b|"
+
+    r")"
+    r"(?:$|[^\w])"
 )
 
 def is_bad_translation(src_text: str, out_text: str) -> tuple[bool, Optional[str]]:
