@@ -68,6 +68,83 @@ NSFW_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+REFUSAL_PATTERN = re.compile(
+    r"("
+    r"\bне могу\b|\bне могу помочь\b|\bизвин\w*\b|\bполитик\w*\b|\bправил\w*\b|\bзапрещен\w*\b"
+    r"|\bas an ai\b|\bi can't\b|\bi cannot\b|\bi won't\b|\bpolicy\b|\bguidelines\b|\bcannot assist\b"
+    r"|\blo siento\b|\bno puedo\b|\bpolític\w*\b|\bdirectrices\b"
+    r"|\bn[ãa]o posso\b|\bdesculp\w*\b|\bpolític\w*\b|\bdiretrizes\b"
+    r")",
+    re.IGNORECASE,
+)
+
+LANG_STOPWORDS = {
+    "en": {"the", "and", "to", "of", "in", "is", "for", "that", "it", "this"},
+    "es": {"el", "la", "de", "que", "y", "en", "los", "las", "para", "un"},
+    "pt": {"o", "a", "de", "que", "e", "em", "os", "as", "para", "um"},
+    "ru": {"и", "в", "не", "на", "что", "я", "мы", "он", "она", "они"},
+}
+
+
+def is_refusal(text: str, max_length: int = 600) -> bool:
+    if not text:
+        return False
+    if len(text) > max_length:
+        return False
+    return bool(REFUSAL_PATTERN.search(text))
+
+
+def _count_matches(text: str, words: set[str]) -> int:
+    if not text:
+        return 0
+    tokens = re.findall(r"\b\w+\b", text.lower())
+    return sum(1 for token in tokens if token in words)
+
+
+def _cyrillic_ratio(text: str) -> float:
+    if not text:
+        return 0.0
+    letters = re.findall(r"[A-Za-zА-Яа-яЁё]", text)
+    if not letters:
+        return 0.0
+    cyrillic = re.findall(r"[А-Яа-яЁё]", text)
+    return len(cyrillic) / len(letters)
+
+
+def looks_like_target_lang(text: str, target: str) -> bool:
+    if not text:
+        return False
+    target_root = target.split("-")[0]
+    cyrillic_ratio = _cyrillic_ratio(text)
+    if target_root == "ru":
+        return cyrillic_ratio >= 0.2
+    if cyrillic_ratio > 0.05:
+        return False
+    words = LANG_STOPWORDS.get(target_root, set())
+    if not words:
+        return True
+    matches = _count_matches(text, words)
+    if len(text) < 20:
+        return matches >= 1
+    has_diacritics = bool(re.search(r"[áéíóúñâêôãõç]", text.lower()))
+    return matches >= 2 or has_diacritics
+
+
+def is_bad_translation(src_text: str, out_text: str, target: str) -> tuple[bool, Optional[str]]:
+    if not out_text:
+        return True, "empty"
+    src_len = len(src_text)
+    out_len = len(out_text)
+    if src_len > 40 and out_len < 10:
+        return True, "too_short"
+    if src_len > 0 and out_len < max(5, int(src_len * 0.1)):
+        return True, "too_short"
+    if is_refusal(out_text):
+        return True, "refusal_text"
+    if not looks_like_target_lang(out_text, target):
+        return True, "wrong_lang"
+    return False, None
+
 
 def _key_prefix(key: str) -> Optional[str]:
     if not key:
@@ -159,9 +236,12 @@ def translate(
 
     translated = ""
     openai_error = None
+    finish_reason = None
+    fallback_reason = None
     use_deepl_only = should_use_deepl(text)
     if use_deepl_only:
         openai_error = {"status": 0, "details": "skipped"}
+        fallback_reason = "nsfw_router"
     elif OPENAI_API_KEY:
         try:
             response = OPENAI_SESSION.post(
@@ -216,10 +296,32 @@ def translate(
             openai_error = {"status": 0, "details": str(exc)}
 
     if translated:
-        return JSONResponse(
-            status_code=200,
-            content={"text": translated, "translation": translated, "provider": "openai"},
-        )
+        bad_translation, bad_reason = is_bad_translation(text, translated, target)
+        if bad_translation:
+            fallback_reason = bad_reason
+            translated = ""
+        else:
+            print("provider_used=openai fallback_reason=None")
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "text": translated,
+                    "translation": translated,
+                    "provider": "openai",
+                    "provider_used": "openai",
+                    "fallback_reason": None,
+                    "openai_finish_reason": finish_reason,
+                },
+            )
+
+    if not translated and not fallback_reason:
+        if openai_error and openai_error.get("details") == "content_filter":
+            fallback_reason = "content_filter"
+        else:
+            fallback_reason = "openai_error"
+
+    if not translated:
+        print(f"provider_used=deepl fallback_reason={fallback_reason}")
 
     if not DEEPL_API_KEY:
         return JSONResponse(
@@ -272,6 +374,9 @@ def translate(
             "text": deepl_translated,
             "translation": deepl_translated,
             "provider": "deepl",
+            "provider_used": "deepl",
+            "fallback_reason": fallback_reason,
+            "openai_finish_reason": finish_reason,
         },
     )
 
