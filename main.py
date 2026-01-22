@@ -68,81 +68,15 @@ NSFW_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-REFUSAL_PATTERN = re.compile(
-    r"("
-    r"\bне могу\b|\bне могу помочь\b|\bизвин\w*\b|\bполитик\w*\b|\bправил\w*\b|\bзапрещен\w*\b"
-    r"|\bas an ai\b|\bi can't\b|\bi cannot\b|\bi won't\b|\bpolicy\b|\bguidelines\b|\bcannot assist\b"
-    r"|\blo siento\b|\bno puedo\b|\bpolític\w*\b|\bdirectrices\b"
-    r"|\bn[ãa]o posso\b|\bdesculp\w*\b|\bpolític\w*\b|\bdiretrizes\b"
-    r")",
-    re.IGNORECASE,
-)
-
-LANG_STOPWORDS = {
-    "en": {"the", "and", "to", "of", "in", "is", "for", "that", "it", "this"},
-    "es": {"el", "la", "de", "que", "y", "en", "los", "las", "para", "un"},
-    "pt": {"o", "a", "de", "que", "e", "em", "os", "as", "para", "um"},
-    "ru": {"и", "в", "не", "на", "что", "я", "мы", "он", "она", "они"},
-}
-
-
-def is_refusal(text: str, max_length: int = 600) -> bool:
-    if not text:
-        return False
-    if len(text) > max_length:
-        return False
-    return bool(REFUSAL_PATTERN.search(text))
-
-
-def _count_matches(text: str, words: set[str]) -> int:
-    if not text:
-        return 0
-    tokens = re.findall(r"\b\w+\b", text.lower())
-    return sum(1 for token in tokens if token in words)
-
-
-def _cyrillic_ratio(text: str) -> float:
-    if not text:
-        return 0.0
-    letters = re.findall(r"[A-Za-zА-Яа-яЁё]", text)
-    if not letters:
-        return 0.0
-    cyrillic = re.findall(r"[А-Яа-яЁё]", text)
-    return len(cyrillic) / len(letters)
-
-
-def looks_like_target_lang(text: str, target: str) -> bool:
-    if not text:
-        return False
-    target_root = target.split("-")[0]
-    cyrillic_ratio = _cyrillic_ratio(text)
-    if target_root == "ru":
-        return cyrillic_ratio >= 0.2
-    if cyrillic_ratio > 0.05:
-        return False
-    words = LANG_STOPWORDS.get(target_root, set())
-    if not words:
-        return True
-    matches = _count_matches(text, words)
-    if len(text) < 20:
-        return matches >= 1
-    has_diacritics = bool(re.search(r"[áéíóúñâêôãõç]", text.lower()))
-    return matches >= 2 or has_diacritics
-
-
-def is_bad_translation(src_text: str, out_text: str, target: str) -> tuple[bool, Optional[str]]:
+def is_bad_translation(src_text: str, out_text: str) -> tuple[bool, Optional[str]]:
     if not out_text:
         return True, "empty"
     src_len = len(src_text)
     out_len = len(out_text)
-    if src_len > 40 and out_len < 10:
+    if src_len > 60 and out_len < max(12, int(src_len * 0.12)):
         return True, "too_short"
-    if src_len > 0 and out_len < max(5, int(src_len * 0.1)):
-        return True, "too_short"
-    if is_refusal(out_text):
-        return True, "refusal_text"
-    if not looks_like_target_lang(out_text, target):
-        return True, "wrong_lang"
+    if src_len > 60 and out_len > int(src_len * 2.8):
+        return True, "too_long"
     return False, None
 
 
@@ -296,7 +230,7 @@ def translate(
             openai_error = {"status": 0, "details": str(exc)}
 
     if translated:
-        bad_translation, bad_reason = is_bad_translation(text, translated, target)
+        bad_translation, bad_reason = is_bad_translation(text, translated)
         if bad_translation:
             fallback_reason = bad_reason
             translated = ""
@@ -315,8 +249,13 @@ def translate(
             )
 
     if not translated and not fallback_reason:
-        if openai_error and openai_error.get("details") == "content_filter":
-            fallback_reason = "content_filter"
+        if openai_error:
+            if openai_error.get("details") == "content_filter":
+                fallback_reason = "content_filter"
+            elif openai_error.get("details") == "empty response":
+                fallback_reason = "empty"
+            else:
+                fallback_reason = "openai_error"
         else:
             fallback_reason = "openai_error"
 
