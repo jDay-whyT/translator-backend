@@ -12,7 +12,8 @@ Simple FastAPI backend for a Telegram Mini App translator.
 - OPENAI_STT_MODEL: optional model name for speech-to-text (default: gpt-4o-mini-transcribe)
 - DEEPL_API_KEY: required for DeepL fallback and NSFW routing
 - TG_ALLOWED_USERNAMES: optional CSV allowlist of Telegram usernames
-- TELEGRAM_BOT_TOKEN: required to run the Telegram bot service
+- TELEGRAM_BOT_TOKEN: required to run the Telegram bot
+- TG_WEBHOOK_SECRET: random 32+ character secret for Telegram webhook
 - PORT: Cloud Run provides this (default 8080)
 
 ## Authorization
@@ -31,10 +32,9 @@ docker run --rm -p 8080:8080 \
   -e TG_ALLOWED_USERNAMES="alice,bob" \
   translator-backend
 
-## Cloud Run: separate services
-Deploy two Cloud Run services from the same repo/image:
+## Cloud Run: single service
+Run FastAPI and the Telegram bot webhook in the same Cloud Run service:
 
-### Service: miniapp (FastAPI)
 Command:
 ```bash
 uvicorn main:app --host 0.0.0.0 --port $PORT
@@ -42,22 +42,12 @@ uvicorn main:app --host 0.0.0.0 --port $PORT
 Environment variables:
 - OPENAI_API_KEY
 - OPENAI_MODEL (optional)
-- DEEPL_API_KEY
-- TG_ALLOWED_USERNAMES (optional)
-- PORT (provided by Cloud Run)
-
-### Service: bot (polling)
-Command:
-```bash
-python bot_chat.py
-```
-Environment variables:
-- TELEGRAM_BOT_TOKEN
-- OPENAI_API_KEY
-- OPENAI_MODEL (optional)
 - OPENAI_STT_MODEL (optional)
 - DEEPL_API_KEY
 - TG_ALLOWED_USERNAMES (optional)
+- TELEGRAM_BOT_TOKEN
+- TG_WEBHOOK_SECRET
+- PORT (provided by Cloud Run)
 
 ## Endpoints
 - GET /health
@@ -67,16 +57,20 @@ Environment variables:
 
 The Mini App frontend is served from `/app`.
 
-## Bot (chat + voice)
-Install dependencies and run the bot:
+## Telegram bot (webhook in same service)
+- Cloud Run service must be **allow-unauthenticated** so Telegram can reach the webhook.
+- Webhook URL: `https://<cloud-run-domain>/tg/webhook`
+- The webhook requires `TG_WEBHOOK_SECRET` and expects header
+  `X-Telegram-Bot-Api-Secret-Token` from Telegram.
 
-```bash
-pip install -r requirements.txt
-export TELEGRAM_BOT_TOKEN="your-bot-token"
-export OPENAI_API_KEY="your-openai-key"
-export DEEPL_API_KEY="your-deepl-key"
-export TG_ALLOWED_USERNAMES="alice,bob"
-python bot_chat.py
+PowerShell examples:
+```powershell
+$BOT_TOKEN="..."
+$URL="https://<domain>/tg/webhook"
+$SECRET="..."
+irm "https://api.telegram.org/bot$BOT_TOKEN/setWebhook?url=$([uri]::EscapeDataString($URL))&secret_token=$SECRET"
+irm "https://api.telegram.org/bot$BOT_TOKEN/getWebhookInfo"
+irm "https://api.telegram.org/bot$BOT_TOKEN/deleteWebhook?drop_pending_updates=true"
 ```
 
 The bot checks `TG_ALLOWED_USERNAMES` against `message.from_user.username` and does not require `X-TG-INITDATA`.

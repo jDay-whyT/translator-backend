@@ -1,3 +1,4 @@
+import asyncio
 import json
 import os
 from pathlib import Path
@@ -7,12 +8,16 @@ from urllib.parse import parse_qs
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
+from telegram import Update
+from telegram.ext import Application
 
+from bot_handlers import build_application
 from gpt_prompts import TARGET_PROMPTS
 from translate_core import translate_core
 
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+TG_WEBHOOK_SECRET = os.getenv("TG_WEBHOOK_SECRET", "")
 TG_ALLOWED_USERNAMES = {
     value.strip().lower()
     for value in os.getenv("TG_ALLOWED_USERNAMES", "").split(",")
@@ -24,6 +29,7 @@ APP_HTML_PATH = BASE_DIR / "app.html"
 APP_CSS_PATH = BASE_DIR / "app.css"
 
 app = FastAPI()
+telegram_application: Optional[Application] = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -71,6 +77,23 @@ def health() -> dict:
     return {"ok": True}
 
 
+@app.on_event("startup")
+async def startup_telegram_bot() -> None:
+    global telegram_application
+    if not TG_WEBHOOK_SECRET:
+        raise RuntimeError("TG_WEBHOOK_SECRET is missing")
+    telegram_application = build_application()
+    await telegram_application.initialize()
+    await telegram_application.start()
+
+
+@app.on_event("shutdown")
+async def shutdown_telegram_bot() -> None:
+    if telegram_application:
+        await telegram_application.stop()
+        await telegram_application.shutdown()
+
+
 @app.get("/debug/env")
 def debug_env() -> dict:
     return {
@@ -101,6 +124,24 @@ def translate(
     status_code = result.pop("status_code", 200)
     result.pop("ok", None)
     return JSONResponse(status_code=status_code, content=result)
+
+
+@app.post("/tg/webhook")
+async def telegram_webhook(
+    payload: dict,
+    x_telegram_bot_api_secret_token: Optional[str] = Header(
+        None, alias="X-Telegram-Bot-Api-Secret-Token"
+    ),
+) -> Response:
+    if x_telegram_bot_api_secret_token != TG_WEBHOOK_SECRET:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if not telegram_application:
+        raise HTTPException(status_code=503, detail="Bot not initialized")
+    update = Update.de_json(payload, telegram_application.bot)
+    if update is None:
+        return Response(status_code=200)
+    asyncio.create_task(telegram_application.process_update(update))
+    return Response(status_code=200)
 
 
 @app.get("/app", response_class=HTMLResponse)
