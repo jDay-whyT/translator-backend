@@ -9,7 +9,10 @@ Simple FastAPI backend for a Telegram Mini App translator.
 ## Environment Variables
 - OPENAI_API_KEY: required OpenAI key
 - OPENAI_MODEL: optional model name (default: gpt-4o-mini)
+- OPENAI_STT_MODEL: optional model name for speech-to-text (default: gpt-4o-mini-transcribe)
+- DEEPL_API_KEY: required for DeepL fallback and NSFW routing
 - TG_ALLOWED_USERNAMES: optional CSV allowlist of Telegram usernames
+- TELEGRAM_BOT_TOKEN: required to run the Telegram bot
 - PORT: Cloud Run provides this (default 8080)
 
 ## Authorization
@@ -24,6 +27,7 @@ docker build -t translator-backend .
 docker run --rm -p 8080:8080 \
   -e OPENAI_API_KEY="your-openai-key" \
   -e OPENAI_MODEL="gpt-4o-mini" \
+  -e DEEPL_API_KEY="your-deepl-key" \
   -e TG_ALLOWED_USERNAMES="alice,bob" \
   translator-backend
 
@@ -34,3 +38,17 @@ docker run --rm -p 8080:8080 \
 - GET /app
 
 The Mini App frontend is served from `/app`.
+
+## Bot (chat + voice)
+Install dependencies and run the bot:
+
+```bash
+pip install -r requirements.txt
+export TELEGRAM_BOT_TOKEN="your-bot-token"
+export OPENAI_API_KEY="your-openai-key"
+export DEEPL_API_KEY="your-deepl-key"
+export TG_ALLOWED_USERNAMES="alice,bob"
+python bot_chat.py
+```
+
+The bot checks `TG_ALLOWED_USERNAMES` against `message.from_user.username` and does not require `X-TG-INITDATA`.
