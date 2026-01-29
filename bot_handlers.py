@@ -190,12 +190,3 @@ def build_application() -> Application:
     application.add_handler(MessageHandler(filters.VOICE, handle_voice))
     application.add_handler(CallbackQueryHandler(handle_language_choice))
     return application
-
-
-def main() -> None:
-    application = build_application()
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
-
-
-if __name__ == "__main__":
-    main()
