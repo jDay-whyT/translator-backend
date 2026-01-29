@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Optional
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -33,6 +34,9 @@ LANGUAGE_OPTIONS = [
     ("pt-pt", "PT-PT"),
 ]
 
+TEXT_CACHE_TTL_SECONDS = 45 * 60
+_TEXT_CACHE: dict[str, tuple[float, str]] = {}
+
 
 def _has_access(username: Optional[str]) -> bool:
     if not TG_ALLOWED_USERNAMES:
@@ -42,10 +46,38 @@ def _has_access(username: Optional[str]) -> bool:
     return username.lower() in TG_ALLOWED_USERNAMES
 
 
-def _build_keyboard() -> InlineKeyboardMarkup:
+def _make_cache_key(chat_id: int, source_message_id: int) -> str:
+    return f"{chat_id}:{source_message_id}"
+
+
+def _store_cached_text(chat_id: int, source_message_id: int, text: str) -> None:
+    expires_at = time.time() + TEXT_CACHE_TTL_SECONDS
+    _TEXT_CACHE[_make_cache_key(chat_id, source_message_id)] = (expires_at, text)
+
+
+def _get_cached_text(chat_id: int, source_message_id: int) -> Optional[str]:
+    key = _make_cache_key(chat_id, source_message_id)
+    cached = _TEXT_CACHE.get(key)
+    if not cached:
+        return None
+    expires_at, text = cached
+    if time.time() > expires_at:
+        _TEXT_CACHE.pop(key, None)
+        return None
+    return text
+
+
+def _build_keyboard(source_message_id: int) -> InlineKeyboardMarkup:
     rows = []
     for target, label in LANGUAGE_OPTIONS:
-        rows.append([InlineKeyboardButton(label, callback_data=f"target:{target}")])
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    label,
+                    callback_data=f"target:{source_message_id}:{target}",
+                )
+            ]
+        )
     return InlineKeyboardMarkup(rows)
 
 
@@ -77,10 +109,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     text = update.message.text.strip()
     if not text:
         return
-    context.user_data["pending_text"] = text
+    _store_cached_text(update.effective_chat.id, update.message.message_id, text)
     await update.message.reply_text(
         "Choose a target language:",
-        reply_markup=_build_keyboard(),
+        reply_markup=_build_keyboard(update.message.message_id),
     )
 
 
@@ -96,10 +128,10 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not text:
         await update.message.reply_text("Could not transcribe the audio.")
         return
-    context.user_data["pending_text"] = text
+    _store_cached_text(update.effective_chat.id, update.message.message_id, text)
     await update.message.reply_text(
         f"Transcribed text:\n\n{text}\n\nChoose a target language:",
-        reply_markup=_build_keyboard(),
+        reply_markup=_build_keyboard(update.message.message_id),
     )
 
 
@@ -115,11 +147,24 @@ async def handle_language_choice(
     data = query.data or ""
     if not data.startswith("target:"):
         return
-    target = data.split(":", 1)[1]
+    parts = data.split(":", 2)
+    if len(parts) != 3:
+        await query.edit_message_text("No text to translate. Send a message first.")
+        return
+    _, source_message_id_raw, target = parts
+    try:
+        source_message_id = int(source_message_id_raw)
+    except ValueError:
+        await query.edit_message_text("No text to translate. Send a message first.")
+        return
     if target not in TARGET_PROMPTS:
         await query.edit_message_text("Unsupported target language.")
         return
-    text = context.user_data.get("pending_text", "")
+    chat_id = update.effective_chat.id if update.effective_chat else 0
+    if not chat_id:
+        await query.edit_message_text("No text to translate. Send a message first.")
+        return
+    text = _get_cached_text(chat_id, source_message_id) or ""
     if not text:
         await query.edit_message_text("No text to translate. Send a message first.")
         return

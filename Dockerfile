@@ -5,9 +5,7 @@ WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-COPY main.py /app/main.py
-COPY gpt_prompts.py /app/gpt_prompts.py
-COPY app.html /app/app.html
+COPY . /app
 
 EXPOSE 8080
 
