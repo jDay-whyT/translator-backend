@@ -12,7 +12,7 @@ Simple FastAPI backend for a Telegram Mini App translator.
 - OPENAI_STT_MODEL: optional model name for speech-to-text (default: gpt-4o-mini-transcribe)
 - DEEPL_API_KEY: required for DeepL fallback and NSFW routing
 - TG_ALLOWED_USERNAMES: optional CSV allowlist of Telegram usernames
-- TELEGRAM_BOT_TOKEN: required to run the Telegram bot
+- TELEGRAM_BOT_TOKEN: required to run the Telegram bot service
 - PORT: Cloud Run provides this (default 8080)
 
 ## Authorization
@@ -30,6 +30,34 @@ docker run --rm -p 8080:8080 \
   -e DEEPL_API_KEY="your-deepl-key" \
   -e TG_ALLOWED_USERNAMES="alice,bob" \
   translator-backend
+
+## Cloud Run: separate services
+Deploy two Cloud Run services from the same repo/image:
+
+### Service: miniapp (FastAPI)
+Command:
+```bash
+uvicorn main:app --host 0.0.0.0 --port $PORT
+```
+Environment variables:
+- OPENAI_API_KEY
+- OPENAI_MODEL (optional)
+- DEEPL_API_KEY
+- TG_ALLOWED_USERNAMES (optional)
+- PORT (provided by Cloud Run)
+
+### Service: bot (polling)
+Command:
+```bash
+python bot_chat.py
+```
+Environment variables:
+- TELEGRAM_BOT_TOKEN
+- OPENAI_API_KEY
+- OPENAI_MODEL (optional)
+- OPENAI_STT_MODEL (optional)
+- DEEPL_API_KEY
+- TG_ALLOWED_USERNAMES (optional)
 
 ## Endpoints
 - GET /health
