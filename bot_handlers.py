@@ -1,3 +1,5 @@
+import html
+import io
 import os
 import time
 from typing import Optional
@@ -102,23 +104,16 @@ def _build_pt_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
-def _escape_inline_code(text: str) -> str:
-    return text.replace("`", "ˋ")
-
-
 def _format_translation(translation: str) -> str:
-    lines = translation.split("\n")
-    formatted_lines = []
-    for line in lines:
-        escaped = _escape_inline_code(line)
-        formatted_lines.append(f"`{escaped}`" if escaped else "``")
-    return "\n".join(formatted_lines)
+    # Self-test: use HTML <pre> so Telegram keeps monospace + copy-friendly block;
+    # escape only HTML chars to prevent tag injection without touching whitespace/emoji.
+    escaped = html.escape(translation, quote=False)
+    return f"<pre>{escaped}</pre>"
 
 
 # Self-check:
 # - ES/PT submenus open via edit_message_reply_markup; Back returns to root.
-# - lang:set:* uses cached source message; formatting uses inline code per line.
-# - Backticks in translation are replaced with ˋ to avoid Markdown breaks.
+# - lang:set:* uses cached source message; formatting uses HTML <pre> with escaping.
 
 
 async def _guard_access(update: Update) -> bool:
@@ -224,10 +219,15 @@ async def handle_language_choice(
     translation = result.get("translation") or result.get("text", "")
     provider = result.get("provider_used", "unknown")
     formatted_translation = _format_translation(translation)
-    await query.edit_message_text(
-        f"{formatted_translation}\n\nProvider: {provider}",
-        parse_mode=ParseMode.MARKDOWN,
-    )
+    message_text = f"{formatted_translation}\n\nProvider: {provider}"
+    if len(message_text) > 3900:
+        translation_bytes = io.BytesIO(translation.encode("utf-8"))
+        translation_bytes.name = "translation.txt"
+        if query.message:
+            await query.message.reply_document(translation_bytes)
+            await query.message.reply_text(f"Provider: {provider}")
+        return
+    await query.edit_message_text(message_text, parse_mode=ParseMode.HTML)
 
 
 def build_application() -> Application:
