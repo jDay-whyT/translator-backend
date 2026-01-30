@@ -52,6 +52,11 @@ def transcribe(audio_bytes: bytes) -> str:
     }
     data = {
         "model": OPENAI_STT_MODEL,
+        "prompt": (
+            "Transcribe exactly. Language may be Russian, Spanish, or English. "
+            "Do not add extra words. Do not translate."
+        ),
+        "temperature": 0,
     }
     try:
         response = OPENAI_SESSION.post(

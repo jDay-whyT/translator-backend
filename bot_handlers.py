@@ -35,7 +35,7 @@ LANGUAGE_OPTIONS = [
 ]
 
 TEXT_CACHE_TTL_SECONDS = 45 * 60
-_TEXT_CACHE: dict[str, tuple[float, str]] = {}
+_TEXT_CACHE: dict[str, tuple[float, str, str]] = {}
 
 
 def _has_access(username: Optional[str]) -> bool:
@@ -50,21 +50,27 @@ def _make_cache_key(chat_id: int, source_message_id: int) -> str:
     return f"{chat_id}:{source_message_id}"
 
 
-def _store_cached_text(chat_id: int, source_message_id: int, text: str) -> None:
+def _store_cached_text(
+    chat_id: int, source_message_id: int, text: str, source: str
+) -> None:
     expires_at = time.time() + TEXT_CACHE_TTL_SECONDS
-    _TEXT_CACHE[_make_cache_key(chat_id, source_message_id)] = (expires_at, text)
+    _TEXT_CACHE[_make_cache_key(chat_id, source_message_id)] = (
+        expires_at,
+        text,
+        source,
+    )
 
 
-def _get_cached_text(chat_id: int, source_message_id: int) -> Optional[str]:
+def _get_cached_text(chat_id: int, source_message_id: int) -> Optional[tuple[str, str]]:
     key = _make_cache_key(chat_id, source_message_id)
     cached = _TEXT_CACHE.get(key)
     if not cached:
         return None
-    expires_at, text = cached
+    expires_at, text, source = cached
     if time.time() > expires_at:
         _TEXT_CACHE.pop(key, None)
         return None
-    return text
+    return text, source
 
 
 def _build_keyboard(source_message_id: int) -> InlineKeyboardMarkup:
@@ -109,7 +115,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     text = update.message.text.strip()
     if not text:
         return
-    _store_cached_text(update.effective_chat.id, update.message.message_id, text)
+    _store_cached_text(update.effective_chat.id, update.message.message_id, text, "text")
     await update.message.reply_text(
         "Choose a target language:",
         reply_markup=_build_keyboard(update.message.message_id),
@@ -128,7 +134,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not text:
         await update.message.reply_text("Could not transcribe the audio.")
         return
-    _store_cached_text(update.effective_chat.id, update.message.message_id, text)
+    _store_cached_text(update.effective_chat.id, update.message.message_id, text, "stt")
     await update.message.reply_text(
         f"Transcribed text:\n\n{text}\n\nChoose a target language:",
         reply_markup=_build_keyboard(update.message.message_id),
@@ -164,11 +170,12 @@ async def handle_language_choice(
     if not chat_id:
         await query.edit_message_text("No text to translate. Send a message first.")
         return
-    text = _get_cached_text(chat_id, source_message_id) or ""
-    if not text:
+    cached = _get_cached_text(chat_id, source_message_id)
+    if not cached:
         await query.edit_message_text("No text to translate. Send a message first.")
         return
-    result = translate_core(text, target)
+    text, source = cached
+    result = translate_core(text, target, source=source)
     if not result.get("ok"):
         error = result.get("error", "Translation failed")
         await query.edit_message_text(f"Translation error: {error}")
