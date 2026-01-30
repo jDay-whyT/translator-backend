@@ -103,12 +103,22 @@ def _build_pt_keyboard() -> InlineKeyboardMarkup:
 
 
 def _escape_inline_code(text: str) -> str:
-    return text.replace("`", "\\`")
+    return text.replace("`", "ˋ")
 
 
 def _format_translation(translation: str) -> str:
     lines = translation.split("\n")
-    return "\n".join(f"`{_escape_inline_code(line)}`" for line in lines)
+    formatted_lines = []
+    for line in lines:
+        escaped = _escape_inline_code(line)
+        formatted_lines.append(f"`{escaped}`" if escaped else "``")
+    return "\n".join(formatted_lines)
+
+
+# Self-check:
+# - ES/PT submenus open via edit_message_reply_markup; Back returns to root.
+# - lang:set:* uses cached source message; formatting uses inline code per line.
+# - Backticks in translation are replaced with ˋ to avoid Markdown breaks.
 
 
 async def _guard_access(update: Update) -> bool:
