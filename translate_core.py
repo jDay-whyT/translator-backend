@@ -33,6 +33,11 @@ def _create_session() -> requests.Session:
 OPENAI_SESSION = _create_session()
 DEEPL_SESSION = _create_session()
 
+LIST_LINE_PATTERN = re.compile(
+    r"^\s*(\d+[\.\)]|[-•—*]|[A-Za-zА-Яа-я]\))\s+",
+    re.MULTILINE,
+)
+
 NSFW_PATTERN = re.compile(
     r"(?ix)"
     r"(?:^|[^\w])"
@@ -94,6 +99,89 @@ def should_use_deepl(text: str, source: str) -> bool:
     if source == "stt":
         return len(NSFW_PATTERN.findall(text)) >= 2
     return bool(NSFW_PATTERN.search(text))
+
+
+def is_structured_text(text: str) -> bool:
+    if text.count("\n") >= 3:
+        return True
+    if "\t" in text:
+        return True
+    return bool(LIST_LINE_PATTERN.search(text))
+
+
+def _count_nonempty_lines(lines: list[str]) -> int:
+    return sum(1 for line in lines if line.strip())
+
+
+def deepl_translate(text: str, target_lang: str) -> dict:
+    try:
+        deepl_response = DEEPL_SESSION.post(
+            "https://api-free.deepl.com/v2/translate",
+            headers={"Authorization": f"DeepL-Auth-Key {DEEPL_API_KEY}"},
+            data={
+                "text": text,
+                "target_lang": target_lang,
+                "preserve_formatting": "1",
+                "split_sentences": "nonewlines",
+            },
+            timeout=(3, 20),
+        )
+    except requests.RequestException as exc:
+        return {
+            "ok": False,
+            "status_code": 502,
+            "error": "DeepL error",
+            "status": 0,
+            "details": str(exc),
+        }
+
+    if deepl_response.status_code != 200:
+        return {
+            "ok": False,
+            "status_code": 502,
+            "error": "DeepL error",
+            "status": deepl_response.status_code,
+            "details": deepl_response.text[:1000],
+        }
+
+    try:
+        deepl_data = deepl_response.json()
+        deepl_translated = deepl_data["translations"][0]["text"].strip()
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError):
+        deepl_translated = ""
+
+    if not deepl_translated:
+        return {
+            "ok": False,
+            "status_code": 502,
+            "error": "DeepL error",
+            "status": deepl_response.status_code,
+        }
+
+    return {
+        "ok": True,
+        "status_code": 200,
+        "text": deepl_translated,
+    }
+
+
+def deepl_translate_structured(text: str, target_lang: str) -> dict:
+    lines = text.splitlines(keepends=False)
+    translated_lines = []
+    for line in lines:
+        if not line.strip():
+            translated_lines.append(line)
+            continue
+        result = deepl_translate(line, target_lang)
+        if not result["ok"]:
+            return result
+        translated_lines.append(result["text"])
+
+    return {
+        "ok": True,
+        "status_code": 200,
+        "text": "\n".join(translated_lines),
+    }
 
 
 def translate_core(text: str, target: str, source: str = "text") -> dict:
@@ -215,58 +303,27 @@ def translate_core(text: str, target: str, source: str = "text") -> dict:
             "openai_finish_reason": finish_reason,
         }
 
-    try:
-        deepl_response = DEEPL_SESSION.post(
-            "https://api-free.deepl.com/v2/translate",
-            headers={"Authorization": f"DeepL-Auth-Key {DEEPL_API_KEY}"},
-            data={
-                "text": text,
-                "target_lang": deepl_target,
-                "preserve_formatting": "1",
-                "split_sentences": "nonewlines",
-            },
-            timeout=(3, 20),
-        )
-    except requests.RequestException as exc:
+    lines = text.splitlines()
+    nonempty_lines = _count_nonempty_lines(lines)
+    use_structured = is_structured_text(text) and nonempty_lines <= 60
+    if use_structured:
+        deepl_result = deepl_translate_structured(text, deepl_target)
+    else:
+        deepl_result = deepl_translate(text, deepl_target)
+
+    if not deepl_result["ok"]:
         return {
             "ok": False,
-            "status_code": 502,
-            "error": "DeepL error",
-            "status": 0,
-            "details": str(exc),
+            "status_code": deepl_result.get("status_code", 502),
+            "error": deepl_result.get("error", "DeepL error"),
+            "status": deepl_result.get("status", 0),
+            "details": deepl_result.get("details", ""),
             "provider_used": "deepl",
             "fallback_reason": fallback_reason,
             "openai_finish_reason": finish_reason,
         }
 
-    if deepl_response.status_code != 200:
-        return {
-            "ok": False,
-            "status_code": 502,
-            "error": "DeepL error",
-            "status": deepl_response.status_code,
-            "details": deepl_response.text[:1000],
-            "provider_used": "deepl",
-            "fallback_reason": fallback_reason,
-            "openai_finish_reason": finish_reason,
-        }
-
-    try:
-        deepl_data = deepl_response.json()
-        deepl_translated = deepl_data["translations"][0]["text"].strip()
-    except (KeyError, IndexError, TypeError, json.JSONDecodeError):
-        deepl_translated = ""
-
-    if not deepl_translated:
-        return {
-            "ok": False,
-            "status_code": 502,
-            "error": "DeepL error",
-            "status": deepl_response.status_code,
-            "provider_used": "deepl",
-            "fallback_reason": fallback_reason,
-            "openai_finish_reason": finish_reason,
-        }
+    deepl_translated = deepl_result["text"]
 
     return {
         "ok": True,
