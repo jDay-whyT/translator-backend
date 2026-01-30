@@ -92,12 +92,193 @@ NSFW_PATTERN = re.compile(
     r"(?:$|[^\w])"
 )
 
+THRESHOLD_STT = 3
+STRONG_TERMS_STT = [
+    # EN
+    "porn*",
+    "xxx",
+    "onlyfans",
+    "nude*",
+    "nsfw",
+    "blow job",
+    "blowjob",
+    "hand job",
+    "handjob",
+    "anal",
+    "rimjob",
+    "pussy",
+    "dick",
+    "cock",
+    "cum",
+    "cumming",
+    "orgasm*",
+    "dildo",
+    "tits",
+    "boobs",
+    "breasts",
+    # RU
+    "порно*",
+    "онлифанс",
+    "нюд*",
+    "анал*",
+    "минет*",
+    "оральн*",
+    "дроч*",
+    "мастурб*",
+    "оргазм*",
+    "пизд*",
+    "киск*",
+    "хуй*",
+    "член*",
+    "пенис*",
+    "сос*",
+    "дилдо*",
+    "сиськ*",
+    "титьк*",
+    "груд*",
+    "конч*",
+    "трах*",
+    # ES
+    "porno*",
+    "xxx",
+    "onlyfans",
+    "desnud*",
+    "mamada",
+    "anal",
+    "polla*",
+    "coñ*",
+    "corrid*",
+    "venirse",
+    "orgasm*",
+    "dildo",
+    "tetas",
+    "pechos",
+    # PT
+    "porno*",
+    "xxx",
+    "onlyfans",
+    "nua*",
+    "pelad*",
+    "boquete",
+    "anal",
+    "bucet*",
+    "pau",
+    "caralh*",
+    "gozad*",
+    "goz*",
+    "orgasm*",
+    "dildo",
+    "tetas",
+    "peit*",
+    "seio*",
+]
+WEAK_TERMS_STT = [
+    # EN
+    "sex",
+    "sext*",
+    "sexchat",
+    "oral",
+    # RU
+    "секс",
+    # ES
+    "sexo*",
+    "oral",
+    # PT
+    "sexo*",
+    "oral",
+]
+
+
+def _normalize_router_text(text: str) -> str:
+    normalized = text.lower().replace("ё", "е")
+    return re.sub(r"[^\w\s]", " ", normalized)
+
+
+def _letters_ratio(text: str) -> float:
+    total = sum(1 for char in text if not char.isspace())
+    if total == 0:
+        return 0.0
+    letters = sum(1 for char in text if char.isalpha())
+    return letters / total
+
+
+def _compile_term_pattern(term: str) -> re.Pattern:
+    words = term.split()
+    last_word = words[-1]
+    has_wildcard = last_word.endswith("*")
+    if has_wildcard:
+        words[-1] = last_word[:-1]
+    escaped_words = [re.escape(word) for word in words]
+    pattern = r"\b" + r"\s+".join(escaped_words)
+    if has_wildcard:
+        pattern += r"\w*"
+    pattern += r"\b"
+    return re.compile(pattern, re.IGNORECASE)
+
+
+STRONG_PATTERNS_STT = [(_term, _compile_term_pattern(_term)) for _term in STRONG_TERMS_STT]
+WEAK_PATTERNS_STT = [(_term, _compile_term_pattern(_term)) for _term in WEAK_TERMS_STT]
+
 
 def should_use_deepl(text: str, source: str) -> bool:
     if not text:
         return False
     if source == "stt":
-        return len(NSFW_PATTERN.findall(text)) >= 2
+        # self-check:
+        # - "one two three" -> False (short transcript)
+        # - neutral ES/PT/EN -> False unless 2+ confident matches
+        # - explicit NSFW transcript -> True
+        if len(text.strip()) < 20:
+            if os.getenv("DEBUG_ROUTER") == "1":
+                print(
+                    f"router_source=stt router_score=0 router_threshold={THRESHOLD_STT} "
+                    "router_hits=[] strong=[] weak=[]"
+                )
+            return False
+        if _letters_ratio(text) < 0.4:
+            if os.getenv("DEBUG_ROUTER") == "1":
+                print(
+                    f"router_source=stt router_score=0 router_threshold={THRESHOLD_STT} "
+                    "router_hits=[] strong=[] weak=[]"
+                )
+            return False
+
+        normalized = _normalize_router_text(text)
+        strong_hits = []
+        weak_hits = []
+        matched_terms = []
+
+        for term, pattern in STRONG_PATTERNS_STT:
+            if pattern.search(normalized):
+                strong_hits.append(term)
+                matched_terms.append(term)
+
+        for term, pattern in WEAK_PATTERNS_STT:
+            if pattern.search(normalized):
+                weak_hits.append(term)
+                matched_terms.append(term)
+
+        strong_hits = sorted(set(strong_hits))
+        weak_hits = sorted(set(weak_hits))
+        matched_terms = sorted(set(matched_terms))
+        score = len(strong_hits) * 2 + len(weak_hits)
+
+        should_route = score >= THRESHOLD_STT or (
+            len(strong_hits) >= 1 and (len(strong_hits) + len(weak_hits)) >= 2
+        )
+        if should_route:
+            print(
+                "router_source=stt "
+                f"router_score={score} router_threshold={THRESHOLD_STT} "
+                f"router_hits={matched_terms} strong={strong_hits} weak={weak_hits}"
+            )
+        elif os.getenv("DEBUG_ROUTER") == "1":
+            print(
+                "router_source=stt "
+                f"router_score={score} router_threshold={THRESHOLD_STT} "
+                f"router_hits={matched_terms} strong={strong_hits} weak={weak_hits}"
+            )
+        return should_route
     return bool(NSFW_PATTERN.search(text))
 
 
