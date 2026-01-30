@@ -279,6 +279,62 @@ def should_use_deepl(text: str, source: str) -> bool:
                 f"router_hits={matched_terms} strong={strong_hits} weak={weak_hits}"
             )
         return should_route
+    if source == "text":
+        # self-check:
+        # - "hi" / "ok" -> False
+        # - neutral ES/PT/EN with 0-1 matches -> False
+        # - explicit NSFW text with multiple terms -> True
+        if len(text.strip()) < 12:
+            if os.getenv("DEBUG_ROUTER") == "1":
+                print(
+                    f"router_source=text router_score=0 router_threshold={THRESHOLD_STT} "
+                    "router_hits=[] strong=[] weak=[]"
+                )
+            return False
+        if _letters_ratio(text) < 0.35:
+            if os.getenv("DEBUG_ROUTER") == "1":
+                print(
+                    f"router_source=text router_score=0 router_threshold={THRESHOLD_STT} "
+                    "router_hits=[] strong=[] weak=[]"
+                )
+            return False
+
+        normalized = _normalize_router_text(text)
+        strong_hits = []
+        weak_hits = []
+        matched_terms = []
+
+        for term, pattern in STRONG_PATTERNS_STT:
+            if pattern.search(normalized):
+                strong_hits.append(term)
+                matched_terms.append(term)
+
+        for term, pattern in WEAK_PATTERNS_STT:
+            if pattern.search(normalized):
+                weak_hits.append(term)
+                matched_terms.append(term)
+
+        strong_hits = sorted(set(strong_hits))
+        weak_hits = sorted(set(weak_hits))
+        matched_terms = sorted(set(matched_terms))
+        score = len(strong_hits) * 2 + len(weak_hits)
+
+        should_route = score >= THRESHOLD_STT or (
+            len(strong_hits) >= 1 and (len(strong_hits) + len(weak_hits)) >= 2
+        )
+        if should_route:
+            print(
+                "router_source=text "
+                f"router_score={score} router_threshold={THRESHOLD_STT} "
+                f"router_hits={matched_terms} strong={strong_hits} weak={weak_hits}"
+            )
+        elif os.getenv("DEBUG_ROUTER") == "1":
+            print(
+                "router_source=text "
+                f"router_score={score} router_threshold={THRESHOLD_STT} "
+                f"router_hits={matched_terms} strong={strong_hits} weak={weak_hits}"
+            )
+        return should_route
     return bool(NSFW_PATTERN.search(text))
 
 
