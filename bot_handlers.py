@@ -25,15 +25,6 @@ TG_ALLOWED_USERNAMES = {
     if value.strip()
 }
 
-LANGUAGE_OPTIONS = [
-    ("en", "EN"),
-    ("ru", "RU"),
-    ("es-es", "ES (ES)"),
-    ("es-latam", "ES (LATAM)"),
-    ("pt-br", "PT-BR"),
-    ("pt-pt", "PT-PT"),
-]
-
 TEXT_CACHE_TTL_SECONDS = 45 * 60
 _TEXT_CACHE: dict[str, tuple[float, str, str]] = {}
 
@@ -73,22 +64,51 @@ def _get_cached_text(chat_id: int, source_message_id: int) -> Optional[tuple[str
     return text, source
 
 
-def _escape_code_block(text: str) -> str:
-    return text.replace("```", "`\u200b``")
-
-
-def _build_keyboard(source_message_id: int) -> InlineKeyboardMarkup:
-    rows = []
-    for target, label in LANGUAGE_OPTIONS:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    label,
-                    callback_data=f"target:{source_message_id}:{target}",
-                )
-            ]
-        )
+def _build_root_keyboard() -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton("EN", callback_data="lang:set:en"),
+            InlineKeyboardButton("RU", callback_data="lang:set:ru"),
+        ],
+        [
+            InlineKeyboardButton("ES ▸", callback_data="lang:root:es"),
+            InlineKeyboardButton("PT ▸", callback_data="lang:root:pt"),
+        ],
+    ]
     return InlineKeyboardMarkup(rows)
+
+
+def _build_es_keyboard() -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton("ES (ES)", callback_data="lang:set:es-es"),
+            InlineKeyboardButton(
+                "ES (LATAM)", callback_data="lang:set:es-latam"
+            ),
+        ],
+        [InlineKeyboardButton("⬅ Back", callback_data="lang:back")],
+    ]
+    return InlineKeyboardMarkup(rows)
+
+
+def _build_pt_keyboard() -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton("PT-BR", callback_data="lang:set:pt-br"),
+            InlineKeyboardButton("PT-PT", callback_data="lang:set:pt-pt"),
+        ],
+        [InlineKeyboardButton("⬅ Back", callback_data="lang:back")],
+    ]
+    return InlineKeyboardMarkup(rows)
+
+
+def _escape_inline_code(text: str) -> str:
+    return text.replace("`", "\\`")
+
+
+def _format_translation(translation: str) -> str:
+    lines = translation.split("\n")
+    return "\n".join(f"`{_escape_inline_code(line)}`" for line in lines)
 
 
 async def _guard_access(update: Update) -> bool:
@@ -122,7 +142,8 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     _store_cached_text(update.effective_chat.id, update.message.message_id, text, "text")
     await update.message.reply_text(
         "Choose a target language:",
-        reply_markup=_build_keyboard(update.message.message_id),
+        reply_markup=_build_root_keyboard(),
+        reply_to_message_id=update.message.message_id,
     )
 
 
@@ -141,7 +162,8 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     _store_cached_text(update.effective_chat.id, update.message.message_id, text, "stt")
     await update.message.reply_text(
         f"Transcribed text:\n\n{text}\n\nChoose a target language:",
-        reply_markup=_build_keyboard(update.message.message_id),
+        reply_markup=_build_root_keyboard(),
+        reply_to_message_id=update.message.message_id,
     )
 
 
@@ -155,20 +177,25 @@ async def handle_language_choice(
         return
     await query.answer()
     data = query.data or ""
-    if not data.startswith("target:"):
+    if data == "lang:root:es":
+        await query.edit_message_reply_markup(reply_markup=_build_es_keyboard())
         return
-    parts = data.split(":", 2)
-    if len(parts) != 3:
-        await query.edit_message_text("No text to translate. Send a message first.")
+    if data == "lang:root:pt":
+        await query.edit_message_reply_markup(reply_markup=_build_pt_keyboard())
         return
-    _, source_message_id_raw, target = parts
-    try:
-        source_message_id = int(source_message_id_raw)
-    except ValueError:
-        await query.edit_message_text("No text to translate. Send a message first.")
+    if data == "lang:back":
+        await query.edit_message_reply_markup(reply_markup=_build_root_keyboard())
         return
+    if not data.startswith("lang:set:"):
+        return
+    target = data.split(":", 2)[-1]
     if target not in TARGET_PROMPTS:
         await query.edit_message_text("Unsupported target language.")
+        return
+    reply_to = query.message.reply_to_message if query.message else None
+    source_message_id = reply_to.message_id if reply_to else None
+    if not source_message_id:
+        await query.edit_message_text("No text to translate. Send a message first.")
         return
     chat_id = update.effective_chat.id if update.effective_chat else 0
     if not chat_id:
@@ -186,9 +213,9 @@ async def handle_language_choice(
         return
     translation = result.get("translation") or result.get("text", "")
     provider = result.get("provider_used", "unknown")
-    safe_translation = _escape_code_block(translation)
+    formatted_translation = _format_translation(translation)
     await query.edit_message_text(
-        f"```\n{safe_translation}\n```\n\nProvider: {provider}",
+        f"{formatted_translation}\n\nProvider: {provider}",
         parse_mode=ParseMode.MARKDOWN,
     )
 
