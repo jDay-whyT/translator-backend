@@ -74,7 +74,7 @@ def _get_cached_text(chat_id: int, source_message_id: int) -> Optional[tuple[str
 
 
 def _escape_code_block(text: str) -> str:
-    return text.replace("```", "\\u0060\\u0060\\u0060")
+    return text.replace("```", "`\u200b``")
 
 
 def _build_keyboard(source_message_id: int) -> InlineKeyboardMarkup:
