@@ -219,7 +219,12 @@ def translate_core(text: str, target: str, source: str = "text") -> dict:
         deepl_response = DEEPL_SESSION.post(
             "https://api-free.deepl.com/v2/translate",
             headers={"Authorization": f"DeepL-Auth-Key {DEEPL_API_KEY}"},
-            data={"text": text, "target_lang": deepl_target},
+            data={
+                "text": text,
+                "target_lang": deepl_target,
+                "preserve_formatting": "1",
+                "split_sentences": "nonewlines",
+            },
             timeout=(3, 20),
         )
     except requests.RequestException as exc:
