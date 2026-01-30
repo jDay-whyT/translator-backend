@@ -223,9 +223,13 @@ async def handle_language_choice(
     if len(message_text) > 3900:
         translation_bytes = io.BytesIO(translation.encode("utf-8"))
         translation_bytes.name = "translation.txt"
+        await query.edit_message_text(
+            f"Sent as file.\n\nProvider: {provider}",
+            parse_mode=None,
+            reply_markup=None,
+        )
         if query.message:
             await query.message.reply_document(translation_bytes)
-            await query.message.reply_text(f"Provider: {provider}")
         return
     await query.edit_message_text(message_text, parse_mode=ParseMode.HTML)
 
