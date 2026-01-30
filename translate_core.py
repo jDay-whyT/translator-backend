@@ -146,7 +146,7 @@ def deepl_translate(text: str, target_lang: str) -> dict:
 
     try:
         deepl_data = deepl_response.json()
-        deepl_translated = deepl_data["translations"][0]["text"].strip()
+        deepl_translated = deepl_data["translations"][0]["text"]
     except (KeyError, IndexError, TypeError, json.JSONDecodeError):
         deepl_translated = ""
 
@@ -185,6 +185,14 @@ def deepl_translate_structured(text: str, target_lang: str) -> dict:
 
 
 def translate_core(text: str, target: str, source: str = "text") -> dict:
+    if target not in TARGET_PROMPTS:
+        return {
+            "ok": False,
+            "status_code": 400,
+            "error": "Unsupported target",
+            "details": "unsupported_target",
+            "provider_used": None,
+        }
     deepl_target = {
         "en": "EN",
         "ru": "RU",
@@ -193,6 +201,14 @@ def translate_core(text: str, target: str, source: str = "text") -> dict:
         "pt-br": "PT-BR",
         "pt-pt": "PT-PT",
     }.get(target)
+    if deepl_target is None:
+        return {
+            "ok": False,
+            "status_code": 400,
+            "error": "Unsupported target",
+            "details": "unsupported_deepl_target",
+            "provider_used": None,
+        }
 
     system_prompt = f"{BASE_SYSTEM_PROMPT}\n{TARGET_PROMPTS[target]}"
     body = {
