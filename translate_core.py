@@ -88,13 +88,15 @@ NSFW_PATTERN = re.compile(
 )
 
 
-def should_use_deepl(text: str) -> bool:
+def should_use_deepl(text: str, source: str) -> bool:
     if not text:
         return False
+    if source == "stt":
+        return len(NSFW_PATTERN.findall(text)) >= 2
     return bool(NSFW_PATTERN.search(text))
 
 
-def translate_core(text: str, target: str) -> dict:
+def translate_core(text: str, target: str, source: str = "text") -> dict:
     deepl_target = {
         "en": "EN",
         "ru": "RU",
@@ -118,7 +120,7 @@ def translate_core(text: str, target: str) -> dict:
     openai_error = None
     finish_reason = None
     fallback_reason = None
-    use_deepl_only = should_use_deepl(text)
+    use_deepl_only = should_use_deepl(text, source)
     if use_deepl_only:
         fallback_reason = "nsfw_router"
     else:
