@@ -73,6 +73,10 @@ def _get_cached_text(chat_id: int, source_message_id: int) -> Optional[tuple[str
     return text, source
 
 
+def _escape_code_block(text: str) -> str:
+    return text.replace("```", "\\u0060\\u0060\\u0060")
+
+
 def _build_keyboard(source_message_id: int) -> InlineKeyboardMarkup:
     rows = []
     for target, label in LANGUAGE_OPTIONS:
@@ -182,8 +186,9 @@ async def handle_language_choice(
         return
     translation = result.get("translation") or result.get("text", "")
     provider = result.get("provider_used", "unknown")
+    safe_translation = _escape_code_block(translation)
     await query.edit_message_text(
-        f"{translation}\n\n_Provider: {provider}_",
+        f"```\n{safe_translation}\n```\n\nProvider: {provider}",
         parse_mode=ParseMode.MARKDOWN,
     )
 
