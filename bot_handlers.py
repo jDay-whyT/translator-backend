@@ -6,6 +6,7 @@ from typing import Optional
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
+from telegram.error import BadRequest
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -29,6 +30,7 @@ TG_ALLOWED_USERNAMES = {
 
 TEXT_CACHE_TTL_SECONDS = 45 * 60
 _TEXT_CACHE: dict[str, tuple[float, str, str]] = {}
+_PROCESSED_CALLBACKS: set[str] = set()
 
 
 def _has_access(username: Optional[str]) -> bool:
@@ -64,6 +66,22 @@ def _get_cached_text(chat_id: int, source_message_id: int) -> Optional[tuple[str
         _TEXT_CACHE.pop(key, None)
         return None
     return text, source
+
+
+def _cleanup_caches() -> None:
+    """Remove expired entries from cache and old processed callbacks."""
+    now = time.time()
+    # Clean expired text cache entries
+    expired_keys = [
+        key for key, (expires_at, _, _) in _TEXT_CACHE.items() if now > expires_at
+    ]
+    for key in expired_keys:
+        _TEXT_CACHE.pop(key, None)
+
+    # Keep only recent callbacks (last 5 minutes worth)
+    # Callback IDs are unique, so we can safely clear old ones
+    if len(_PROCESSED_CALLBACKS) > 1000:
+        _PROCESSED_CALLBACKS.clear()
 
 
 def _build_root_keyboard() -> InlineKeyboardMarkup:
@@ -180,58 +198,126 @@ async def handle_language_choice(
     query = update.callback_query
     if not query:
         return
+
+    # Prevent duplicate callback processing
+    callback_id = query.id
+    if callback_id in _PROCESSED_CALLBACKS:
+        await query.answer()
+        return
+    _PROCESSED_CALLBACKS.add(callback_id)
+
+    # Periodic cleanup
+    if len(_TEXT_CACHE) % 50 == 0:
+        _cleanup_caches()
+
     await query.answer()
     data = query.data or ""
+
+    # Handle submenu navigation
     if data == "lang:root:es":
-        await query.edit_message_reply_markup(reply_markup=_build_es_keyboard())
+        try:
+            await query.edit_message_reply_markup(reply_markup=_build_es_keyboard())
+        except BadRequest as e:
+            # Ignore "message is not modified" errors
+            if "message is not modified" not in str(e).lower():
+                raise
         return
+
     if data == "lang:root:pt":
-        await query.edit_message_reply_markup(reply_markup=_build_pt_keyboard())
+        try:
+            await query.edit_message_reply_markup(reply_markup=_build_pt_keyboard())
+        except BadRequest as e:
+            if "message is not modified" not in str(e).lower():
+                raise
         return
+
     if data == "lang:back":
-        await query.edit_message_reply_markup(reply_markup=_build_root_keyboard())
+        try:
+            await query.edit_message_reply_markup(reply_markup=_build_root_keyboard())
+        except BadRequest as e:
+            if "message is not modified" not in str(e).lower():
+                raise
         return
+
+    # Handle language selection
     if not data.startswith("lang:set:"):
         return
+
     target = data.split(":", 2)[-1]
     if target not in TARGET_PROMPTS:
-        await query.edit_message_text("Unsupported target language.")
+        try:
+            await query.edit_message_text("Unsupported target language.")
+        except BadRequest as e:
+            if "message is not modified" not in str(e).lower():
+                raise
         return
+
     reply_to = query.message.reply_to_message if query.message else None
     source_message_id = reply_to.message_id if reply_to else None
     if not source_message_id:
-        await query.edit_message_text("No text to translate. Send a message first.")
+        try:
+            await query.edit_message_text("No text to translate. Send a message first.")
+        except BadRequest as e:
+            if "message is not modified" not in str(e).lower():
+                raise
         return
+
     chat_id = update.effective_chat.id if update.effective_chat else 0
     if not chat_id:
-        await query.edit_message_text("No text to translate. Send a message first.")
+        try:
+            await query.edit_message_text("No text to translate. Send a message first.")
+        except BadRequest as e:
+            if "message is not modified" not in str(e).lower():
+                raise
         return
+
     cached = _get_cached_text(chat_id, source_message_id)
     if not cached:
-        await query.edit_message_text("No text to translate. Send a message first.")
+        try:
+            await query.edit_message_text("No text to translate. Send a message first.")
+        except BadRequest as e:
+            if "message is not modified" not in str(e).lower():
+                raise
         return
+
     text, source = cached
     result = translate_core(text, target, source=source)
+
     if not result.get("ok"):
         error = result.get("error", "Translation failed")
-        await query.edit_message_text(f"Translation error: {error}")
+        try:
+            await query.edit_message_text(f"Translation error: {error}")
+        except BadRequest as e:
+            if "message is not modified" not in str(e).lower():
+                raise
         return
+
     translation = result.get("translation") or result.get("text", "")
     provider = result.get("provider_used", "unknown")
     formatted_translation = _format_translation(translation)
     message_text = f"{formatted_translation}\n\nProvider: {provider}"
+
     if len(message_text) > 3900:
         translation_bytes = io.BytesIO(translation.encode("utf-8"))
         translation_bytes.name = "translation.txt"
-        await query.edit_message_text(
-            f"Sent as file.\n\nProvider: {provider}",
-            parse_mode=None,
-            reply_markup=None,
-        )
+        try:
+            await query.edit_message_text(
+                f"Sent as file.\n\nProvider: {provider}",
+                parse_mode=None,
+                reply_markup=None,
+            )
+        except BadRequest as e:
+            if "message is not modified" not in str(e).lower():
+                raise
         if query.message:
             await query.message.reply_document(translation_bytes)
         return
-    await query.edit_message_text(message_text, parse_mode=ParseMode.HTML)
+
+    try:
+        await query.edit_message_text(message_text, parse_mode=ParseMode.HTML)
+    except BadRequest as e:
+        if "message is not modified" not in str(e).lower():
+            raise
 
 
 def build_application() -> Application:
