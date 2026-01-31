@@ -1,11 +1,13 @@
 import html
 import io
+import logging
 import os
 import time
 from typing import Optional
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
+from telegram.error import BadRequest, TimedOut, NetworkError
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -19,6 +21,8 @@ from gpt_prompts import TARGET_PROMPTS
 from stt import transcribe
 from translate_core import translate_core
 
+
+logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 TG_ALLOWED_USERNAMES = {
@@ -111,6 +115,47 @@ def _format_translation(translation: str) -> str:
     return f"<pre>{escaped}</pre>"
 
 
+async def _safe_edit_text(query, text: str, **kwargs) -> bool:
+    """Edit message text with error handling for deleted/outdated messages."""
+    try:
+        await query.edit_message_text(text, **kwargs)
+        return True
+    except BadRequest as e:
+        error_msg = str(e).lower()
+        if "message is not modified" in error_msg:
+            return True  # Not an error, just no change needed
+        if "message to edit not found" in error_msg:
+            logger.warning("Message was deleted before edit could complete")
+            return False
+        if "message can't be edited" in error_msg:
+            logger.warning("Message can no longer be edited (too old or wrong type)")
+            return False
+        logger.error("BadRequest editing message: %s", e)
+        return False
+    except (TimedOut, NetworkError) as e:
+        logger.warning("Network error editing message: %s", e)
+        return False
+
+
+async def _safe_edit_markup(query, reply_markup) -> bool:
+    """Edit message reply markup with error handling."""
+    try:
+        await query.edit_message_reply_markup(reply_markup=reply_markup)
+        return True
+    except BadRequest as e:
+        error_msg = str(e).lower()
+        if "message is not modified" in error_msg:
+            return True
+        if "message to edit not found" in error_msg:
+            logger.warning("Message was deleted before markup edit")
+            return False
+        logger.error("BadRequest editing markup: %s", e)
+        return False
+    except (TimedOut, NetworkError) as e:
+        logger.warning("Network error editing markup: %s", e)
+        return False
+
+
 # Self-check:
 # - ES/PT submenus open via edit_message_reply_markup; Back returns to root.
 # - lang:set:* uses cached source message; formatting uses HTML <pre> with escaping.
@@ -183,38 +228,38 @@ async def handle_language_choice(
     await query.answer()
     data = query.data or ""
     if data == "lang:root:es":
-        await query.edit_message_reply_markup(reply_markup=_build_es_keyboard())
+        await _safe_edit_markup(query, _build_es_keyboard())
         return
     if data == "lang:root:pt":
-        await query.edit_message_reply_markup(reply_markup=_build_pt_keyboard())
+        await _safe_edit_markup(query, _build_pt_keyboard())
         return
     if data == "lang:back":
-        await query.edit_message_reply_markup(reply_markup=_build_root_keyboard())
+        await _safe_edit_markup(query, _build_root_keyboard())
         return
     if not data.startswith("lang:set:"):
         return
     target = data.split(":", 2)[-1]
     if target not in TARGET_PROMPTS:
-        await query.edit_message_text("Unsupported target language.")
+        await _safe_edit_text(query, "Unsupported target language.")
         return
     reply_to = query.message.reply_to_message if query.message else None
     source_message_id = reply_to.message_id if reply_to else None
     if not source_message_id:
-        await query.edit_message_text("No text to translate. Send a message first.")
+        await _safe_edit_text(query, "No text to translate. Send a message first.")
         return
     chat_id = update.effective_chat.id if update.effective_chat else 0
     if not chat_id:
-        await query.edit_message_text("No text to translate. Send a message first.")
+        await _safe_edit_text(query, "No text to translate. Send a message first.")
         return
     cached = _get_cached_text(chat_id, source_message_id)
     if not cached:
-        await query.edit_message_text("No text to translate. Send a message first.")
+        await _safe_edit_text(query, "No text to translate. Send a message first.")
         return
     text, source = cached
     result = translate_core(text, target, source=source)
     if not result.get("ok"):
         error = result.get("error", "Translation failed")
-        await query.edit_message_text(f"Translation error: {error}")
+        await _safe_edit_text(query, f"Translation error: {error}")
         return
     translation = result.get("translation") or result.get("text", "")
     provider = result.get("provider_used", "unknown")
@@ -223,15 +268,19 @@ async def handle_language_choice(
     if len(message_text) > 3900:
         translation_bytes = io.BytesIO(translation.encode("utf-8"))
         translation_bytes.name = "translation.txt"
-        await query.edit_message_text(
+        await _safe_edit_text(
+            query,
             f"Sent as file.\n\nProvider: {provider}",
             parse_mode=None,
             reply_markup=None,
         )
         if query.message:
-            await query.message.reply_document(translation_bytes)
+            try:
+                await query.message.reply_document(translation_bytes)
+            except (BadRequest, TimedOut, NetworkError) as e:
+                logger.warning("Failed to send translation file: %s", e)
         return
-    await query.edit_message_text(message_text, parse_mode=ParseMode.HTML)
+    await _safe_edit_text(query, message_text, parse_mode=ParseMode.HTML)
 
 
 def build_application() -> Application:
