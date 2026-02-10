@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 from urllib.parse import parse_qs
@@ -28,8 +29,24 @@ BASE_DIR = Path(__file__).resolve().parent
 APP_HTML_PATH = BASE_DIR / "app.html"
 APP_CSS_PATH = BASE_DIR / "app.css"
 
-app = FastAPI()
 telegram_application: Optional[Application] = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global telegram_application
+    if not TG_WEBHOOK_SECRET:
+        raise RuntimeError("TG_WEBHOOK_SECRET is missing")
+    telegram_application = build_application()
+    await telegram_application.initialize()
+    await telegram_application.start()
+    yield
+    if telegram_application:
+        await telegram_application.stop()
+        await telegram_application.shutdown()
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -75,23 +92,6 @@ def require_access(x_tg_initdata: Optional[str] = Header(None)) -> None:
 @app.get("/health")
 def health() -> dict:
     return {"ok": True}
-
-
-@app.on_event("startup")
-async def startup_telegram_bot() -> None:
-    global telegram_application
-    if not TG_WEBHOOK_SECRET:
-        raise RuntimeError("TG_WEBHOOK_SECRET is missing")
-    telegram_application = build_application()
-    await telegram_application.initialize()
-    await telegram_application.start()
-
-
-@app.on_event("shutdown")
-async def shutdown_telegram_bot() -> None:
-    if telegram_application:
-        await telegram_application.stop()
-        await telegram_application.shutdown()
 
 
 @app.get("/debug/env")

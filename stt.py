@@ -7,7 +7,7 @@ from urllib3.util.retry import Retry
 
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_STT_MODEL = os.getenv("OPENAI_STT_MODEL", "gpt-4o-mini-transcribe")
+OPENAI_STT_MODEL = os.getenv("OPENAI_STT_MODEL", "whisper-1")
 
 
 def _create_session() -> requests.Session:
