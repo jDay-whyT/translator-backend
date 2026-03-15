@@ -65,6 +65,7 @@ Return ONLY the translated text.
     "es-latam": """
 Target language: Spanish (Latin America).
 Use natural Latin American Spanish for informal online communication.
+Do NOT use inverted question marks (¿) or exclamation marks (¡) — in casual messaging, only use ? and ! at the end.
 Avoid vocabulary specific to Spain (e.g., use "coger" awareness, prefer "tomar" in non-sexual contexts).
 Preserve register: crude stays crude, formal stays formal.
 Return ONLY the translated text.
@@ -73,6 +74,7 @@ Return ONLY the translated text.
     "es-es": """
 Target language: Spanish (Europe).
 Use natural European Spanish for informal online communication.
+Do NOT use inverted question marks (¿) or exclamation marks (¡) — in casual messaging, only use ? and ! at the end.
 Use Peninsular vocabulary and vosotros forms where appropriate.
 Preserve register: crude stays crude, formal stays formal.
 Return ONLY the translated text.
