@@ -216,6 +216,13 @@ def _compile_term_pattern(term: str) -> re.Pattern:
     return re.compile(pattern, re.IGNORECASE)
 
 
+def _remove_inverted_punctuation(text: str) -> str:
+    """Remove inverted Spanish punctuation marks for casual messaging."""
+    text = text.replace('¿', '')
+    text = text.replace('¡', '')
+    return text
+
+
 STRONG_PATTERNS_STT = [(_term, _compile_term_pattern(_term)) for _term in STRONG_TERMS_STT]
 WEAK_PATTERNS_STT = [(_term, _compile_term_pattern(_term)) for _term in WEAK_TERMS_STT]
 
@@ -526,6 +533,10 @@ def translate_core(text: str, target: str, source: str = "text") -> dict:
             fallback_reason = "too_short"
             translated = ""
         else:
+            # Post-process: remove inverted punctuation for Spanish
+            if target in ("es-es", "es-latam"):
+                translated = _remove_inverted_punctuation(translated)
+            
             print("provider_used=openai fallback_reason=None")
             return {
                 "ok": True,
@@ -577,6 +588,10 @@ def translate_core(text: str, target: str, source: str = "text") -> dict:
         }
 
     deepl_translated = deepl_result["text"]
+    
+    # Post-process: remove inverted punctuation for Spanish
+    if target in ("es-es", "es-latam"):
+        deepl_translated = _remove_inverted_punctuation(deepl_translated)
 
     return {
         "ok": True,
