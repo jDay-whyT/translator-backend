@@ -1,3 +1,4 @@
+import asyncio
 import html
 import io
 import logging
@@ -256,7 +257,8 @@ async def handle_language_choice(
         await _safe_edit_text(query, "No text to translate. Send a message first.")
         return
     text, source = cached
-    result = translate_core(text, target, source=source)
+    await _safe_edit_text(query, "⏳ Translating...")
+    result = await asyncio.to_thread(translate_core, text, target, source=source)
     if not result.get("ok"):
         error = result.get("error", "Translation failed")
         await _safe_edit_text(query, f"Translation error: {error}")
