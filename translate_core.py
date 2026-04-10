@@ -454,7 +454,7 @@ def translate_core(text: str, target: str, source: str = "text") -> dict:
             "provider_used": None,
         }
 
-    system_prompt = f"{BASE_SYSTEM_PROMPT}\n{TARGET_PROMPTS[target]}"
+    system_prompt = f"{TARGET_PROMPTS[target]}\n\n{BASE_SYSTEM_PROMPT}"
     body = {
         "model": OPENAI_MODEL,
         "temperature": 0,
