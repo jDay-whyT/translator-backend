@@ -266,13 +266,13 @@ async def handle_language_choice(
     translation = result.get("translation") or result.get("text", "")
     provider = result.get("provider_used", "unknown")
     formatted_translation = _format_translation(translation)
-    message_text = f"{formatted_translation}\n\nProvider: {provider}"
+    message_text = f"{formatted_translation}\n\nProvider: {provider} · {target.upper()}"
     if len(message_text) > 3900:
         translation_bytes = io.BytesIO(translation.encode("utf-8"))
         translation_bytes.name = "translation.txt"
         await _safe_edit_text(
             query,
-            f"Sent as file.\n\nProvider: {provider}",
+            f"Sent as file.\n\nProvider: {provider} · {target.upper()}",
             parse_mode=None,
             reply_markup=None,
         )
