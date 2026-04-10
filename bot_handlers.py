@@ -109,6 +109,12 @@ def _build_pt_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
+def _build_retranslate_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("🔄 Другой язык", callback_data="lang:pick")
+    ]])
+
+
 def _format_translation(translation: str) -> str:
     # Self-test: use HTML <pre> so Telegram keeps monospace + copy-friendly block;
     # escape only HTML chars to prevent tag injection without touching whitespace/emoji.
@@ -237,6 +243,9 @@ async def handle_language_choice(
     if data == "lang:back":
         await _safe_edit_markup(query, _build_root_keyboard())
         return
+    if data == "lang:pick":
+        await _safe_edit_markup(query, _build_root_keyboard())
+        return
     if not data.startswith("lang:set:"):
         return
     target = data.split(":", 2)[-1]
@@ -274,7 +283,7 @@ async def handle_language_choice(
             query,
             f"Sent as file.\n\nProvider: {provider} · {target.upper()}",
             parse_mode=None,
-            reply_markup=None,
+            reply_markup=_build_retranslate_keyboard(),
         )
         if query.message:
             try:
@@ -282,7 +291,7 @@ async def handle_language_choice(
             except (BadRequest, TimedOut, NetworkError) as e:
                 logger.warning("Failed to send translation file: %s", e)
         return
-    await _safe_edit_text(query, message_text, parse_mode=ParseMode.HTML)
+    await _safe_edit_text(query, message_text, parse_mode=ParseMode.HTML, reply_markup=_build_retranslate_keyboard())
 
 
 def build_application() -> Application:
