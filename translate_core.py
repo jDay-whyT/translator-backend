@@ -506,6 +506,10 @@ def translate_core(text: str, target: str, source: str = "text") -> dict:
                                 choice = data["choices"][0]
                                 translated = choice["message"]["content"].strip()
                                 finish_reason = choice.get("finish_reason")
+                                if translated == "[REFUSED]":
+                                    translated = ""
+                                    fallback_reason = "refusal"
+                                    print(f"openai_refusal target={target} text_preview={text[:80]!r}")
                             except (KeyError, IndexError, TypeError):
                                 translated = ""
                                 finish_reason = None
