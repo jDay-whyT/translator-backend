@@ -510,6 +510,16 @@ def translate_core(text: str, target: str, source: str = "text") -> dict:
                                     translated = ""
                                     fallback_reason = "refusal"
                                     print(f"openai_refusal target={target} text_preview={text[:80]!r}")
+                                else:
+                                    if finish_reason == "content_filter":
+                                        translated = ""
+                                        openai_error = {
+                                            "status": response.status_code,
+                                            "details": "content_filter",
+                                        }
+                                        fallback_reason = "content_filter"
+                                    elif not translated:
+                                        fallback_reason = "empty"
                             except (KeyError, IndexError, TypeError):
                                 translated = ""
                                 finish_reason = None
@@ -517,15 +527,6 @@ def translate_core(text: str, target: str, source: str = "text") -> dict:
                                     "status": response.status_code,
                                     "details": "malformed response",
                                 }
-                            if finish_reason == "content_filter":
-                                translated = ""
-                                openai_error = {
-                                    "status": response.status_code,
-                                    "details": "content_filter",
-                                }
-                                fallback_reason = "content_filter"
-                            elif not translated:
-                                fallback_reason = "empty"
             except requests.RequestException as exc:
                 openai_error = {"status": 0, "details": str(exc)}
 
