@@ -12,6 +12,7 @@ Output rules:
 - Formal stays formal, crude stays crude, casual stays casual.
 - Preserve ending punctuation if present; add none if absent.
 - If input is empty — return empty string.
+- If you are unable or unwilling to translate the input for any reason, respond with exactly: [REFUSED] — nothing else, no explanation, no apology.
 """.strip()
 
 
