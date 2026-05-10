@@ -7,19 +7,24 @@ Simple FastAPI backend for a Telegram Mini App translator.
 - Google Cloud Run
 
 ## Environment Variables
-- OPENAI_API_KEY: required OpenAI key
-- OPENAI_MODEL: optional model name (default: gpt-4o-mini)
-- OPENAI_STT_MODEL: optional model name for speech-to-text (default: gpt-4o-mini-transcribe)
-- DEEPL_API_KEY: required for DeepL fallback and NSFW routing
-- TG_ALLOWED_USERNAMES: optional CSV allowlist of Telegram usernames
-- TELEGRAM_BOT_TOKEN: required to run the Telegram bot
-- TG_WEBHOOK_SECRET: random 32+ character secret for Telegram webhook
-- PORT: Cloud Run provides this (default 8080)
+- `OPENAI_API_KEY`: required — OpenAI key
+- `OPENAI_MODEL`: optional — translation model (default: `gpt-4o-mini`)
+- `OPENAI_STT_MODEL`: optional — speech-to-text model (default: `whisper-1`)
+- `DEEPL_API_KEY`: required — DeepL fallback translation
+- `TELEGRAM_BOT_TOKEN`: required — Telegram bot token; also used to verify Mini App `initData` HMAC
+- `TG_WEBHOOK_SECRET`: required — random 32+ character secret for Telegram webhook
+- `TG_ALLOWED_USERNAMES`: optional — CSV allowlist of Telegram usernames
+- `INITDATA_MAX_AGE_SECONDS`: optional — max age of `auth_date` in `initData` (default: `3600`)
+- `PORT`: Cloud Run provides this (default `8080`)
 
 ## Authorization
-- Client must send `X-TG-INITDATA` header; otherwise the API returns `401`.
-- If `TG_ALLOWED_USERNAMES` is set, the API returns `403` when the Telegram username
-  is not in the allowlist.
+Every `/api/translate` request must include an `X-TG-INITDATA` header containing a valid
+Telegram Mini App `initData` string. The backend verifies the HMAC-SHA256 signature using
+`TELEGRAM_BOT_TOKEN` (per the [Telegram Mini App spec](https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app))
+and rejects tokens older than `INITDATA_MAX_AGE_SECONDS`.
+
+- Missing or invalid signature → `401`
+- Valid signature but username not in `TG_ALLOWED_USERNAMES` → `403`
 
 ## Build
 docker build -t translator-backend .
