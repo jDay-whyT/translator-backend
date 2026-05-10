@@ -38,59 +38,6 @@ LIST_LINE_PATTERN = re.compile(
     re.MULTILINE,
 )
 
-NSFW_PATTERN = re.compile(
-    r"(?ix)"
-    r"(?:^|[^\w])"
-    r"("
-
-    # ---------------- EN ----------------
-    r"sex\b|sext\w*|sexchat\b|"
-    r"porn\w*|xxx\b|onlyfans\b|"
-    r"nude\w*|nsfw\b|"
-    r"blow\s*job|blowjob\b|"
-    r"hand\s*job|handjob\b|"
-    r"anal\b|rimjob\b|"
-    r"pussy\b|dick\b|cock\b|"
-    r"cum\b|cumming\b|orgasm\w*|"
-    r"dildo\b|"
-    r"tits?\b|boobs?\b|breasts?\b|"
-
-    # ---------------- RU ----------------
-    r"|секс\w*|порно\w*|онлифанс\w*|"
-    r"нюд\w*|nsfw\b|"
-    r"анал\w*|минет\w*|оральн\w*|"
-    r"дроч\w*|мастурб\w*|оргазм\w*|"
-    r"пизд\w*|киск\w*|"
-    r"хуй\w*|член\w*|пенис\w*|"
-    r"сос\w*|"
-    r"дилдо\w*|"
-    r"сиськ\w*|титьк\w*|груд\w*|"
-    r"конч\w*|"
-    r"трах\w*|"
-
-    # ---------------- ES ----------------
-    r"|sexo\w*|porno\w*|nsfw\b|xxx\b|onlyfans\b|"
-    r"desn?ud\w*|"
-    r"mamada\w*|oral\b|"
-    r"anal\b|"
-    r"polla\w*|coñ\w*|"
-    r"corrid\w*|venirse\b|orgasm\w*|"
-    r"dildo\b|"
-    r"tetas?\b|pechos?\b|"
-
-    # ---------------- PT ----------------
-    r"|sexo\w*|porno\w*|nsfw\b|xxx\b|onlyfans\b|"
-    r"nua?\w*|pelad\w*|"
-    r"boquete\w*|oral\b|"
-    r"anal\b|"
-    r"bucet\w*|pau\b|caralh\w*|"
-    r"gozad\w*|goz\w*|orgasm\w*|"
-    r"dildo\b|"
-    r"tetas?\b|peitos?\b|seios?\b|"
-
-    r")"
-    r"(?:$|[^\w])"
-)
 
 THRESHOLD_STT = 3
 STRONG_TERMS_STT = [
@@ -261,7 +208,7 @@ def should_use_deepl(text: str, source: str) -> bool:
         return _route_by_terms(text, source, min_len=20, min_ratio=0.4)
     if source == "text":
         return _route_by_terms(text, source, min_len=12, min_ratio=0.35)
-    return bool(NSFW_PATTERN.search(text))
+    return False
 
 
 def is_structured_text(text: str) -> bool:
