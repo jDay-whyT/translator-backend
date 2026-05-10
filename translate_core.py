@@ -3,35 +3,17 @@ import os
 import re
 
 import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 
 from gpt_prompts import BASE_SYSTEM_PROMPT, TARGET_PROMPTS
+from http_session import create_session
 
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 DEEPL_API_KEY = os.getenv("DEEPL_API_KEY", "")
 
-
-def _create_session() -> requests.Session:
-    retry = Retry(
-        total=3,
-        status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods={"POST"},
-        backoff_factor=0.6,
-        respect_retry_after_header=True,
-        raise_on_status=False,
-    )
-    adapter = HTTPAdapter(max_retries=retry)
-    session = requests.Session()
-    session.mount("https://", adapter)
-    session.mount("http://", adapter)
-    return session
-
-
-OPENAI_SESSION = _create_session()
-DEEPL_SESSION = _create_session()
+OPENAI_SESSION = create_session()
+DEEPL_SESSION = create_session()
 
 LIST_LINE_PATTERN = re.compile(
     r"^\s*(\d+[\.\)]|[-•—*]|[A-Za-zА-Яа-я]\))\s+",
