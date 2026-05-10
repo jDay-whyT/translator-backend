@@ -272,7 +272,7 @@ async def handle_language_choice(
         error = result.get("error", "Translation failed")
         await _safe_edit_text(query, f"Translation error: {error}")
         return
-    translation = result.get("translation") or result.get("text", "")
+    translation = result.get("text", "")
     provider = result.get("provider_used", "unknown")
     formatted_translation = _format_translation(translation)
     message_text = f"{formatted_translation}\n\nProvider: {provider} · {target.upper()}"
