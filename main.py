@@ -98,8 +98,6 @@ def _verify_tg_initdata(init_data: str) -> bool:
         decoded_value = unquote(value)
         if key == "hash":
             received_hash = decoded_value
-        elif key == "signature":
-            pass
         else:
             check_pairs.append(f"{key}={decoded_value}")
             if key == "auth_date":
