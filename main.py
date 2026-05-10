@@ -1,6 +1,9 @@
 import asyncio
+import hashlib
+import hmac
 import json
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -19,6 +22,8 @@ from translate_core import translate_core
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 TG_WEBHOOK_SECRET = os.getenv("TG_WEBHOOK_SECRET", "")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+INITDATA_MAX_AGE_SECONDS = int(os.getenv("INITDATA_MAX_AGE_SECONDS", "3600"))
 TG_ALLOWED_USERNAMES = {
     value.strip().lower()
     for value in os.getenv("TG_ALLOWED_USERNAMES", "").split(",")
@@ -80,8 +85,40 @@ def _parse_username_from_init_data(init_data: str) -> Optional[str]:
     return str(username)
 
 
+def _verify_tg_initdata(init_data: str) -> bool:
+    if not TELEGRAM_BOT_TOKEN or not init_data:
+        return False
+    received_hash = None
+    auth_date = None
+    check_pairs: list[str] = []
+    for pair in init_data.split("&"):
+        if not pair:
+            continue
+        key, _, value = pair.partition("=")
+        if key == "hash":
+            received_hash = value
+        else:
+            check_pairs.append(pair)
+            if key == "auth_date":
+                try:
+                    auth_date = int(value)
+                except ValueError:
+                    return False
+    if not received_hash or auth_date is None:
+        return False
+    if time.time() - auth_date > INITDATA_MAX_AGE_SECONDS:
+        return False
+    check_pairs.sort()
+    data_check_string = "\n".join(check_pairs)
+    secret_key = hmac.new(b"WebAppData", TELEGRAM_BOT_TOKEN.encode(), hashlib.sha256).digest()
+    computed = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(computed, received_hash)
+
+
 def require_access(x_tg_initdata: Optional[str] = Header(None)) -> None:
     if not x_tg_initdata:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if not _verify_tg_initdata(x_tg_initdata):
         raise HTTPException(status_code=401, detail="Unauthorized")
     if TG_ALLOWED_USERNAMES:
         username = _parse_username_from_init_data(x_tg_initdata)
