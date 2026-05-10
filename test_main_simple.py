@@ -1,5 +1,10 @@
+import hashlib
+import hmac as _hmac
+import json
 import os
 import sys
+import time
+import urllib.parse
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
@@ -27,6 +32,22 @@ mock_app_instance.shutdown = AsyncMock()
 mock_app_instance.bot = MagicMock()
 mock_bot_handlers.build_application = MagicMock(return_value=mock_app_instance)
 sys.modules['bot_handlers'] = mock_bot_handlers
+
+_TEST_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+
+
+def _make_initdata(username: str = "testuser") -> str:
+    user_json = json.dumps({"id": 123, "username": username}, separators=(",", ":"))
+    auth_date = str(int(time.time()))
+    pairs = sorted([
+        f"auth_date={auth_date}",
+        f"user={urllib.parse.quote(user_json, safe='')}",
+    ])
+    data_check_string = "\n".join(pairs)
+    secret_key = _hmac.new(b"WebAppData", _TEST_BOT_TOKEN.encode(), hashlib.sha256).digest()
+    hash_val = _hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+    return "&".join(pairs) + f"&hash={hash_val}"
+
 
 # Now safe to import
 from fastapi.testclient import TestClient
@@ -78,7 +99,7 @@ def test_translate_with_auth_missing_text(client):
     response = client.post(
         "/api/translate",
         json={"target": "ru"},
-        headers={"X-TG-INITDATA": "user=%7B%22id%22%3A123%2C%22username%22%3A%22testuser%22%7D"}
+        headers={"X-TG-INITDATA": _make_initdata()}
     )
     assert response.status_code == 400
     assert "error" in response.json()
@@ -89,7 +110,7 @@ def test_translate_with_auth_text_too_long(client):
     response = client.post(
         "/api/translate",
         json={"text": long_text, "target": "ru"},
-        headers={"X-TG-INITDATA": "user=%7B%22id%22%3A123%2C%22username%22%3A%22testuser%22%7D"}
+        headers={"X-TG-INITDATA": _make_initdata()}
     )
     assert response.status_code == 400
     assert "error" in response.json()
@@ -99,7 +120,7 @@ def test_translate_with_unsupported_target(client):
     response = client.post(
         "/api/translate",
         json={"text": "hello", "target": "unsupported"},
-        headers={"X-TG-INITDATA": "user=%7B%22id%22%3A123%2C%22username%22%3A%22testuser%22%7D"}
+        headers={"X-TG-INITDATA": _make_initdata()}
     )
     assert response.status_code == 400
     assert "error" in response.json()
