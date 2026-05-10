@@ -107,26 +107,18 @@ def _verify_tg_initdata(init_data: str) -> bool:
                     return False
     if not received_hash or auth_date is None:
         return False
-    age = time.time() - auth_date
-    if age > INITDATA_MAX_AGE_SECONDS:
-        print(f"[hmac_debug] STALE auth_date={auth_date} age={age:.0f}s limit={INITDATA_MAX_AGE_SECONDS}", flush=True)
+    if time.time() - auth_date > INITDATA_MAX_AGE_SECONDS:
         return False
     check_pairs.sort()
     data_check_string = "\n".join(check_pairs)
     secret_key = hmac.new(b"WebAppData", TELEGRAM_BOT_TOKEN.encode(), hashlib.sha256).digest()
     computed = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-    print(f"[hmac_debug] auth_date={auth_date} age={age:.0f}s", flush=True)
-    print(f"[hmac_debug] check_pairs={check_pairs}", flush=True)
-    print(f"[hmac_debug] computed={computed}", flush=True)
-    print(f"[hmac_debug] received={received_hash}", flush=True)
-    print(f"[hmac_debug] match={hmac.compare_digest(computed, received_hash)}", flush=True)
     return hmac.compare_digest(computed, received_hash)
 
 
 def require_access(x_tg_initdata: Optional[str] = Header(None)) -> None:
     if not x_tg_initdata:
         raise HTTPException(status_code=401, detail="Unauthorized")
-    print(f"initdata_raw={x_tg_initdata[:300]!r}", flush=True)
     if not _verify_tg_initdata(x_tg_initdata):
         raise HTTPException(status_code=401, detail="Unauthorized")
     if TG_ALLOWED_USERNAMES:
