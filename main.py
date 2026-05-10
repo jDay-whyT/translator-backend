@@ -118,6 +118,7 @@ def _verify_tg_initdata(init_data: str) -> bool:
 def require_access(x_tg_initdata: Optional[str] = Header(None)) -> None:
     if not x_tg_initdata:
         raise HTTPException(status_code=401, detail="Unauthorized")
+    print(f"initdata_raw={x_tg_initdata[:300]!r}", flush=True)
     if not _verify_tg_initdata(x_tg_initdata):
         raise HTTPException(status_code=401, detail="Unauthorized")
     if TG_ALLOWED_USERNAMES:
