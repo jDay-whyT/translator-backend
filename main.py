@@ -7,7 +7,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, unquote
 
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -95,12 +95,13 @@ def _verify_tg_initdata(init_data: str) -> bool:
         if not pair:
             continue
         key, _, value = pair.partition("=")
+        decoded_value = unquote(value)
         if key == "hash":
-            received_hash = value
+            received_hash = decoded_value
         elif key == "signature":
             pass
         else:
-            check_pairs.append(pair)
+            check_pairs.append(f"{key}={decoded_value}")
             if key == "auth_date":
                 try:
                     auth_date = int(value)
