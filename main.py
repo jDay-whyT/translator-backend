@@ -104,7 +104,7 @@ def debug_env() -> dict:
 
 
 @app.post("/api/translate")
-def translate(
+async def translate(
     payload: dict,
     _: None = Depends(require_access),
 ) -> JSONResponse:
@@ -120,7 +120,7 @@ def translate(
     if target not in TARGET_PROMPTS:
         return JSONResponse(status_code=400, content={"error": "Unsupported target"})
 
-    result = translate_core(text, target)
+    result = await asyncio.to_thread(translate_core, text, target)
     status_code = result.pop("status_code", 200)
     result.pop("ok", None)
     return JSONResponse(status_code=status_code, content=result)

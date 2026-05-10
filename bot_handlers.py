@@ -212,7 +212,7 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     voice = update.message.voice
     file = await voice.get_file()
     audio_bytes = await file.download_as_bytearray()
-    text = transcribe(bytes(audio_bytes))
+    text = await asyncio.to_thread(transcribe, bytes(audio_bytes))
     if not text:
         await update.message.reply_text("Could not transcribe the audio.")
         return
