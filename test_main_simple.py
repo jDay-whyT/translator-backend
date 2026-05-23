@@ -39,14 +39,20 @@ _TEST_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 def _make_initdata(username: str = "testuser") -> str:
     user_json = json.dumps({"id": 123, "username": username}, separators=(",", ":"))
     auth_date = str(int(time.time()))
-    pairs = sorted([
+    # Server decodes values before computing HMAC check string
+    decoded_pairs = sorted([
+        f"auth_date={auth_date}",
+        f"user={user_json}",
+    ])
+    data_check_string = "\n".join(decoded_pairs)
+    secret_key = _hmac.new(b"WebAppData", _TEST_BOT_TOKEN.encode(), hashlib.sha256).digest()
+    hash_val = _hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+    # Actual initdata string uses URL-encoded values
+    encoded_pairs = sorted([
         f"auth_date={auth_date}",
         f"user={urllib.parse.quote(user_json, safe='')}",
     ])
-    data_check_string = "\n".join(pairs)
-    secret_key = _hmac.new(b"WebAppData", _TEST_BOT_TOKEN.encode(), hashlib.sha256).digest()
-    hash_val = _hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-    return "&".join(pairs) + f"&hash={hash_val}"
+    return "&".join(encoded_pairs) + f"&hash={hash_val}"
 
 
 # Now safe to import
@@ -67,7 +73,7 @@ def test_health_endpoint(client):
 
 
 def test_debug_env_endpoint(client):
-    response = client.get("/debug/env")
+    response = client.get("/debug/env", headers={"X-TG-INITDATA": _make_initdata()})
     assert response.status_code == 200
     data = response.json()
     assert "ok" in data

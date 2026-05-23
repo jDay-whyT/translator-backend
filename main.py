@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import hmac
 import json
+import logging
 import os
 import time
 from contextlib import asynccontextmanager
@@ -14,6 +15,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from telegram import Update
 from telegram.ext import Application
+
+logger = logging.getLogger(__name__)
 
 from bot_handlers import build_application
 from gpt_prompts import TARGET_PROMPTS
@@ -133,7 +136,7 @@ def health() -> dict:
 
 
 @app.get("/debug/env")
-def debug_env() -> dict:
+def debug_env(_: None = Depends(require_access)) -> dict:
     return {
         "ok": True,
         "openai_key_present": bool(OPENAI_API_KEY),
@@ -178,7 +181,13 @@ async def telegram_webhook(
     update = Update.de_json(payload, telegram_application.bot)
     if update is None:
         return Response(status_code=200)
-    asyncio.create_task(telegram_application.process_update(update))
+    async def _process():
+        try:
+            await telegram_application.process_update(update)
+        except Exception:
+            logger.exception("Unhandled error processing Telegram update %s", update.update_id)
+
+    asyncio.create_task(_process())
     return Response(status_code=200)
 
 
