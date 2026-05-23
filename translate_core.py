@@ -258,21 +258,23 @@ def deepl_translate(text: str, target_lang: str) -> dict:
 
 
 def deepl_translate_structured(text: str, target_lang: str) -> dict:
-    lines = text.splitlines(keepends=False)
+    lines = text.splitlines(keepends=True)
     translated_lines = []
     for line in lines:
-        if not line.strip():
+        ending = line[len(line.rstrip("\r\n")):]
+        stripped = line.rstrip("\r\n")
+        if not stripped.strip():
             translated_lines.append(line)
             continue
-        result = deepl_translate(line, target_lang)
+        result = deepl_translate(stripped, target_lang)
         if not result["ok"]:
             return result
-        translated_lines.append(result["text"])
+        translated_lines.append(result["text"] + ending)
 
     return {
         "ok": True,
         "status_code": 200,
-        "text": "\n".join(translated_lines),
+        "text": "".join(translated_lines),
     }
 
 

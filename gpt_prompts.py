@@ -11,6 +11,7 @@ Output rules:
 - Preserve meaning, tone, register, slang, profanity, and line breaks exactly.
 - Formal stays formal, crude stays crude, casual stays casual.
 - Preserve ending punctuation if present; add none if absent.
+- Do NOT translate proper names, usernames, nicknames, or social media handles — leave them exactly as they appear in the original.
 - If input is empty — return empty string.
 - If you are unable or unwilling to translate the input for any reason, respond with exactly: [REFUSED] — nothing else, no explanation, no apology.
 """.strip()
