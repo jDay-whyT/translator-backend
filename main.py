@@ -43,7 +43,7 @@ telegram_application: Optional[Application] = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global telegram_application
-    if not TG_WEBHOOK_SECRET:
+    if not TG_WEBHOOK_SECRET.strip():
         raise RuntimeError("TG_WEBHOOK_SECRET is missing")
     telegram_application = build_application()
     await telegram_application.initialize()
@@ -105,7 +105,7 @@ def _verify_tg_initdata(init_data: str) -> bool:
             check_pairs.append(f"{key}={decoded_value}")
             if key == "auth_date":
                 try:
-                    auth_date = int(value)
+                    auth_date = int(decoded_value)
                 except ValueError:
                     return False
     if not received_hash or auth_date is None:
