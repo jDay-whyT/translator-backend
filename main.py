@@ -16,11 +16,11 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from telegram import Update
 from telegram.ext import Application
 
-logger = logging.getLogger(__name__)
-
 from bot_handlers import build_application
 from gpt_prompts import TARGET_PROMPTS
 from translate_core import translate_core
+
+logger = logging.getLogger(__name__)
 
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
