@@ -56,8 +56,8 @@ Environment variables:
 
 ## Endpoints
 - GET /health
-- GET /debug/env
-- POST /api/translate
+- GET /debug/env — requires `X-TG-INITDATA` auth
+- POST /api/translate — requires `X-TG-INITDATA` auth
 - GET /app
 
 The Mini App frontend is served from `/app`.
