@@ -181,13 +181,10 @@ async def telegram_webhook(
     update = Update.de_json(payload, telegram_application.bot)
     if update is None:
         return Response(status_code=200)
-    async def _process():
-        try:
-            await telegram_application.process_update(update)
-        except Exception:
-            logger.exception("Unhandled error processing Telegram update %s", update.update_id)
-
-    asyncio.create_task(_process())
+    try:
+        await telegram_application.process_update(update)
+    except Exception:
+        logger.exception("Unhandled error processing Telegram update %s", update.update_id)
     return Response(status_code=200)
 
 
