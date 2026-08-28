@@ -232,7 +232,10 @@ async def handle_language_choice(
     query = update.callback_query
     if not query:
         return
-    await query.answer()
+    try:
+        await query.answer()
+    except (TimedOut, NetworkError) as e:
+        logger.warning("Network error answering callback query: %s", e)
     data = query.data or ""
     if data == "lang:root:es":
         await _safe_edit_markup(query, _build_es_keyboard())
