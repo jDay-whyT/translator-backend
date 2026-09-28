@@ -9,7 +9,7 @@ Simple FastAPI backend for a Telegram Mini App translator.
 ## Environment Variables
 - `OPENAI_API_KEY`: required — OpenAI key
 - `OPENAI_MODEL`: optional — translation model (default: `gpt-4o-mini`)
-- `OPENAI_STT_MODEL`: optional — speech-to-text model (default: `whisper-1`)
+- `OPENAI_STT_MODEL`: optional — speech-to-text model (default: `gpt-transcribe`)
 - `DEEPL_API_KEY`: required — DeepL fallback translation
 - `TELEGRAM_BOT_TOKEN`: required — Telegram bot token; also used to verify Mini App `initData` HMAC
 - `TG_WEBHOOK_SECRET`: required — random 32+ character secret for Telegram webhook

@@ -7,7 +7,7 @@ from http_session import create_session
 
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_STT_MODEL = os.getenv("OPENAI_STT_MODEL", "whisper-1")
+OPENAI_STT_MODEL = os.getenv("OPENAI_STT_MODEL", "gpt-transcribe")
 
 OPENAI_SESSION = create_session()
 
